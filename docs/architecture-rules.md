@@ -90,13 +90,67 @@ constructor(@Inject(UnitRepository) private readonly units: UnitRepository) {}
 ## 트랜잭션
 
 - **트랜잭션은 usecase 가 연다.** `TransactionRunner` 를 주입받아 `this.tx.run(async () => { ... })` 로 감싼다.
-- application 과 repository 는 트랜잭션을 인자로 받지 않는다. repository 는 현재 실행 컨텍스트의 연결을 쓰고, `run` 안에서 불리면 자동으로 그 트랜잭션에 참여한다.
+- application 과 repository 는 트랜잭션을 인자로 받지 않는다. repository 는 `CurrentDb` 를 주입받아 쿼리할 때마다 `this.db.get()` 으로 현재 실행 컨텍스트의 연결을 얻는다. `run` 안에서 불리면 그 트랜잭션 핸들이, 밖이면 루트 연결(자동 커밋)이 나온다.
 - 조회만 하는 usecase 는 `run` 으로 감싸지 않는다.
+- `run` 안에서 `run` 을 또 부르면 새로 열지 않고 바깥 트랜잭션에 합류한다. 커밋·롤백은 가장 바깥 `run` 이 정한다.
+
+포트는 모두 `InfraModule` 이 전역으로 제공한다. 인터페이스와 토큰이 같은 이름이므로 값 import(`import { X }`)로 가져온다.
+
+| 포트                | import                              | 쓰는 레이어   |
+| ------------------- | ----------------------------------- | ------------- |
+| `TransactionRunner` | `@repo/nest-kit/transaction-runner` | `usecases`    |
+| `CurrentDb`         | `@repo/nest-kit/current-db`         | `infra`       |
+| `EventOutbox`       | `@repo/nest-kit/event-outbox`       | `application` |
+| `MessageInbox`      | `@repo/nest-kit/message-inbox`      | `usecases`    |
+
+```ts
+// domains/unit/infra/drizzle-unit.repository.ts
+import type * as schema from '../../../db/schema.js';
+
+constructor(@Inject(CurrentDb) private readonly db: CurrentDb<typeof schema>) {}
+
+async findBySerial(serialNumber: string) {
+  const [row] = await this.db.get().select().from(units).where(eq(units.serialNumber, serialNumber));
+  return row && toUnit(row);
+}
+
+// usecases/record-unit-event.usecase.ts
+constructor(
+  @Inject(TransactionRunner) private readonly tx: TransactionRunner,
+  private readonly units: UnitService,
+) {}
+
+execute(request: RecordUnitEventRequest) {
+  return this.tx.run(async () => toView(await this.units.record(request)));
+}
+```
+
+- `this.db.get()` 의 반환값을 필드나 생성자에서 보관하지 않는다. 보관한 연결은 트랜잭션에 참여하지 못한다.
+- `InfraModule` 의 `DB` 토큰(루트 연결)과 `enqueue(tx, ...)`·`claimMessage(tx, ...)` 는 옮기기 전 코드를 위한 것이다. `DB` 로 실행한 쿼리는 `run` 에 참여하지 않으므로 새 구조에서는 쓰지 않는다.
 
 ## 이벤트
 
 - 다른 서비스로 내보내는 이벤트는 application 서비스가 `EventOutbox` 포트로 적는다. usecase 가 연 트랜잭션에 같이 묶인다.
-- 받는 쪽은 `presentation/consumer` 다. 메시지를 `@repo/contracts` 스키마로 검증한 뒤 usecase 를 부른다. 멱등 처리는 usecase 의 트랜잭션 안에서 한다.
+- 받는 쪽은 `presentation/consumer` 다. 메시지를 `@repo/contracts` 스키마로 검증한 뒤 usecase 를 부른다. 멱등 처리는 usecase 의 트랜잭션 안에서 `MessageInbox.claim` 으로 한다. 트랜잭션 밖에서 부르면 예외가 난다.
+
+```ts
+// domains/service-case/application/service-case.service.ts
+constructor(
+  @Inject(ServiceCaseRepository) private readonly cases: ServiceCaseRepository,
+  @Inject(EventOutbox) private readonly outbox: EventOutbox,
+) {}
+
+await this.cases.save(updated);
+await this.outbox.enqueue(Topics.asCaseEvents, updated.serialNumber, makeEvent('as.doa.confirmed', { ... }));
+
+// usecases/apply-doa-confirmed.usecase.ts  (consumer 가 부른다)
+execute(message: { id: string; event: DoaConfirmed }) {
+  return this.tx.run(async () => {
+    if (!(await this.inbox.claim(CONSUMER_GROUP, message.id))) return;
+    await this.orders.requestReplacement(message.event);
+  });
+}
+```
 
 ## 타입과 규격
 
