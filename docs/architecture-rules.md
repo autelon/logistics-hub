@@ -203,4 +203,4 @@ execute(message: { id: string; event: DoaConfirmed }) {
 - [x] 공용 부품: `TransactionRunner`, `CurrentDb`, `EventOutbox`, `MessageInbox`, 레이어 의존 린트 규칙
 - [ ] `scm-api` (도메인: `catalog`, `unit`)
 - [ ] `oms-api` (도메인: `sellable`, `order`)
-- [ ] `as-api` (도메인: `service-case`)
+- [x] `as-api` (도메인: `service-case`)
