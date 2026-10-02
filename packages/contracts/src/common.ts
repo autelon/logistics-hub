@@ -33,9 +33,21 @@ export const makeEvent = <T extends string, P>(type: T, payload: P) => {
 /** 어느 서비스든 낼 수 있는 에러 코드. 서비스 고유 코드는 각 서비스의 규격 파일에 있다. */
 export const CommonErrorCode = z.enum([
   'VALIDATION_FAILED', // 요청 형식이 스키마와 다름. details 에 필드별 사유
-  'BAD_REQUEST', // 그 밖의 잘못된 요청 (본문 파싱 실패 등)
-  'NOT_FOUND', // 없는 경로
-  'INTERNAL_ERROR', // 서버 쪽 문제. 원인은 응답에 싣지 않는다
+  'BAD_REQUEST', // 그 밖의 잘못된 요청 (본문 파싱 실패 등). 아래 표에 없는 4xx 도 이 코드
+  'UNAUTHORIZED', // 401
+  'FORBIDDEN', // 403
+  'NOT_FOUND', // 404. 없는 경로
+  'METHOD_NOT_ALLOWED', // 405
+  'NOT_ACCEPTABLE', // 406
+  'REQUEST_TIMEOUT', // 408
+  'CONFLICT', // 409
+  'PAYLOAD_TOO_LARGE', // 413. 본문 파서의 한도 초과
+  'UNSUPPORTED_MEDIA_TYPE', // 415
+  'UNPROCESSABLE_ENTITY', // 422
+  'TOO_MANY_REQUESTS', // 429
+  'INTERNAL_ERROR', // 서버 쪽 문제. 원인은 응답에 싣지 않는다. 아래 둘을 뺀 모든 5xx
+  'SERVICE_UNAVAILABLE', // 503
+  'GATEWAY_TIMEOUT', // 504
 ]);
 export type CommonErrorCode = z.infer<typeof CommonErrorCode>;
 
