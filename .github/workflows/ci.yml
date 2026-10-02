@@ -6,10 +6,16 @@ on:
   pull_request:
 
 jobs:
+  # 이 job 이름(check)이 main 병합의 필수 조건이다. 바꾸면 .github/rulesets/main.json 도 같이 바꾼다.
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: 커밋 메시지 형식
+        if: github.event_name == 'pull_request'
+        run: scripts/check-commits.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
       - uses: jdx/mise-action@v3
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
