@@ -188,11 +188,13 @@ folder, with format-on-save and lint wired up.
 
 The design documents are written in Korean.
 
-| Document                                   | Contents                                                                                          |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| [01 Concept](docs/01-concept.md)           | What the system does and does not do, its three principles, the boundary with OMS and after-sales |
-| [02 Domain model](docs/02-domain-model.md) | Tables, unit events and state transitions, corrections, bundles, DOA events                       |
-| [03 Architecture](docs/03-architecture.md) | Services and topics, outbox and idempotency, package dependencies                                 |
-| [04 Decisions](docs/04-decisions.md)       | Technology choices and why                                                                        |
-| [05 Roadmap](docs/05-roadmap.md)           | What is not built yet                                                                             |
-| [Git rules](docs/git-rules.md)             | Commit and pull request conventions                                                               |
+| Document                                         | Contents                                                                                          |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| [01 Concept](docs/01-concept.md)                 | What the system does and does not do, its three principles, the boundary with OMS and after-sales |
+| [02 Domain model](docs/02-domain-model.md)       | Tables, unit events and state transitions, corrections, bundles, DOA events                       |
+| [03 Architecture](docs/03-architecture.md)       | Services and topics, outbox and idempotency, package dependencies                                 |
+| [04 Decisions](docs/04-decisions.md)             | Technology choices and why                                                                        |
+| [05 Roadmap](docs/05-roadmap.md)                 | What is not built yet                                                                             |
+| [Git rules](docs/git-rules.md)                   | Commit and pull request conventions                                                               |
+| [Architecture rules](docs/architecture-rules.md) | Layering inside each service: domain modules, use cases, presentation                             |
+| [Agent workflow](docs/agent-workflow.md)         | How coding agents split, build and review work in this repository                                 |

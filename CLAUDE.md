@@ -64,6 +64,12 @@
   새 코드는 `@repo/contracts` 의 해당 서비스 `*ErrorCode` 에 추가하고 `errors.ts` 에 상태를 적는다. `message` 는 선택이고, 호출 측 분기는 `code` 로만 한다.
 - **판단 규칙은 순수 함수로 빼고 테스트한다** (예: `unit-projection.ts`, `fulfillment.ts`). 서비스 클래스에 규칙을 섞지 않는다.
 
+## 작업 방식과 구조
+
+- 코드 작업은 서브에이전트에게 나눠 맡기고 메인 에이전트가 PR 을 검토해 병합한다. 역할과 검토 기준은 `docs/agent-workflow.md`.
+- `apps/*-api` 에 코드를 추가하거나 옮기기 전에 `docs/architecture-rules.md` 를 읽는다.
+  도메인 모듈(`domains/<도메인>/{domain,application,infra}`) + `usecases/` + `presentation/{api,consumer,batch}` 구조와 레이어 의존 규칙이 있다.
+
 ## Git
 
 커밋이나 PR 을 만들기 전에, 그리고 기존 코드가 왜 그 모양인지 조사할 때 `docs/git-rules.md` 를 먼저 읽는다.
