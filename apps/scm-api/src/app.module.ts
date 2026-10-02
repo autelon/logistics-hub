@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { serviceConfigModule } from '@repo/nest-kit/config';
 import { HealthController } from '@repo/nest-kit/health.controller';
 import { InfraModule } from '@repo/nest-kit/infra.module';
+import { LoggerModule } from '@repo/nest-kit/logger.module';
 
 import { CatalogController } from './catalog/catalog.controller.js';
 import * as schema from './db/schema.js';
@@ -15,6 +16,7 @@ import { UnitsService } from './units/units.service.js';
     serviceConfigModule({
       defaults: { PORT: 3001, DATABASE_URL: 'mysql://root:root@localhost:3306/lh_scm' },
     }),
+    LoggerModule,
     InfraModule.forRoot({ schema }),
   ],
   controllers: [HealthController, CatalogController, UnitsController],
