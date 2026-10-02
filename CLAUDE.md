@@ -44,6 +44,8 @@
 - **패키지는 `dist` 로 소비된다.** `packages/*` 를 고친 뒤 앱에서 `tsc` 나 `vitest` 를 직접 돌리면 옛 타입을 본다.
   turbo 로 돌리거나 먼저 `pnpm build` 한다.
 - **타입 인지 린트 규칙은 `oxlint-disable-next-line` 주석으로 꺼지지 않는다.** 꼭 필요하면 `.oxlintrc.json` 의 `overrides` 에 파일 단위로 넣는다.
+- **oxlint 의 `overrides` 는 같은 규칙의 옵션을 합치지 않는다.** 파일에 맞는 마지막 override 의 옵션이 앞의 것을 통째로 대체한다.
+  그래서 `.oxlintrc.json` 의 `eslint/no-restricted-imports` 는 override 마다 Nest 예외 금지(`paths`)를 반복해 적어 두었다. 한 곳을 고치면 나머지도 고친다.
 - **`apps/web` 은 zod 를 직접 import 하지 않는다.** 필요한 타입은 `@repo/contracts` 에서 export 해서 쓴다.
 - **스키마를 바꾸면 `db:generate` 로 마이그레이션을 만든다.** `drizzle/` 아래 생성물은 손으로 고치지 않는다.
   서비스의 테이블은 `src/db/schema.ts` 한 파일에 둔다.

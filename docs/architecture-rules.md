@@ -57,6 +57,10 @@ presentation ──▶ usecases ──▶ application ──▶ domain ◀──
 - **presentation 은 항상 usecase 를 거친다.** 단순 조회도 예외가 아니다. 얇은 usecase 가 하나 생기는 비용보다 "언제 건너뛰어도 되나"를 매번 판단하는 비용이 크다.
 - **도메인은 서로를 import 하지 않는다.** A 의 처리에 B 의 데이터가 필요하면 usecase 가 B 에서 읽어 A 에 넘긴다.
 - 이 표는 린트(`no-restricted-imports`)로 강제한다. 린트를 끄거나 우회하지 않는다.
+  규칙은 `.oxlintrc.json` 의 `overrides` 에 있고, import 경로 문자열을 정규식으로 검사한다. 그래서 잡지 못하는 것이 있다:
+  - 다른 도메인 import 는 레이어 폴더 바로 아래 파일(`domains/<a>/domain/x.ts`)과 `<a>.module.ts` 에서만 빠짐없이 잡힌다.
+    레이어 폴더 안에 하위 폴더를 만들면 `../../../<b>/...` 형태가 검사를 빠져나가므로 하위 폴더를 만들지 않는다.
+  - `domain` 이 `@repo/contracts` 에서 값 타입이 아닌 것(요청·응답 타입)을 가져오는 것, `application` 이 `@repo/db-kit` 을 가져오는 것은 검사하지 않는다. 검토에서 본다.
 
 ## Repository
 
@@ -196,7 +200,7 @@ execute(message: { id: string; event: DoaConfirmed }) {
 이 규칙은 2026-10-03 에 정했고, 기존 코드는 아직 기능별 폴더(`units/`, `orders/`, `cases/` 등)에 controller·service 가 함께 있다.
 아래 순서로 옮긴다. 옮긴 서비스는 목록에서 지우고, 전부 끝나면 이 절을 삭제한다.
 
-- [ ] 공용 부품: `TransactionRunner`, `EventOutbox`, 레이어 의존 린트 규칙
+- [x] 공용 부품: `TransactionRunner`, `CurrentDb`, `EventOutbox`, `MessageInbox`, 레이어 의존 린트 규칙
 - [ ] `scm-api` (도메인: `catalog`, `unit`)
 - [ ] `oms-api` (도메인: `sellable`, `order`)
 - [ ] `as-api` (도메인: `service-case`)
