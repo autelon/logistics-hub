@@ -67,7 +67,7 @@ SCM 은 이벤트 id 를 `unit_events.idempotency_key` 로 쓴다.
 
 | 층          | 정의 위치                                                             | 예                                                                |
 | ----------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 공통        | `@repo/contracts/common` 의 `CommonErrorCode`                         | `VALIDATION_FAILED` `BAD_REQUEST` `NOT_FOUND` `INTERNAL_ERROR`    |
+| 공통        | `@repo/contracts/common` 의 `CommonErrorCode`                         | `VALIDATION_FAILED` `NOT_FOUND` `INTERNAL_ERROR`                  |
 | 서비스 고유 | 각 서비스 규격 파일의 `ScmErrorCode` · `OmsErrorCode` · `AsErrorCode` | `UNIT_EVENT_ALREADY_CORRECTED` `UNKNOWN_SELLABLE` `CASE_NOT_OPEN` |
 
 코드 목록은 서비스의 공개 규격이므로 `contracts` 에 있고, 코드와 HTTP 상태를 묶는 표는 각 앱의 `src/errors.ts` 에 있다.
@@ -77,8 +77,85 @@ SCM 은 이벤트 id 를 `unit_events.idempotency_key` 로 쓴다.
 
 1. 서비스 코드는 `scmError('UNIT_NOT_FOUND', ...)` 처럼 자기 앱의 에러 함수로만 던진다. 코드 인자가 타입으로 강제된다.
 2. Nest 내장 HTTP 예외(`NotFoundException` 등)는 앱에서 import 하면 린트 오류다.
-3. 전역 필터(`ApiErrorFilter`)가 나머지를 받는다. 프레임워크가 던진 4xx 는 공통 코드를 붙이고,
-   예상하지 못한 예외는 내용을 숨긴 채 `500 { "code": "INTERNAL_ERROR" }` 만 내보내고 서버 로그에 남긴다.
+3. 전역 필터(`ApiErrorFilter`, `@repo/nest-kit`)가 나머지를 받아 아래 표대로 바꾼다. 변환 자체는 순수 함수 `toErrorResponse` 다.
+
+### 프레임워크 예외의 변환
+
+서비스 코드가 아니라 Nest·Express 가 던지는 예외(없는 경로, 깨진 JSON 본문, 너무 큰 본문 등)는 **HTTP 상태를 그대로 두고** 상태별 공통 코드를 붙인다.
+
+| HTTP 상태                                                   | 코드                                                                                                                                                                                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400 401 403 404 405 406 408 409 413 415 422 429             | `BAD_REQUEST` `UNAUTHORIZED` `FORBIDDEN` `NOT_FOUND` `METHOD_NOT_ALLOWED` `NOT_ACCEPTABLE` `REQUEST_TIMEOUT` `CONFLICT` `PAYLOAD_TOO_LARGE` `UNSUPPORTED_MEDIA_TYPE` `UNPROCESSABLE_ENTITY` `TOO_MANY_REQUESTS` |
+| 그 밖의 4xx                                                 | `BAD_REQUEST` (상태는 원래 값)                                                                                                                                                                                  |
+| 503 504                                                     | `SERVICE_UNAVAILABLE` `GATEWAY_TIMEOUT`                                                                                                                                                                         |
+| 그 밖의 5xx, `HttpException` 이 아닌 예외, Error 가 아닌 값 | `INTERNAL_ERROR` (500)                                                                                                                                                                                          |
+
+- **4xx** 는 사람이 읽을 설명을 전달한다. `HttpException.getResponse()` 가 문자열이면 `message`, 객체면 그 `message` 필드만 쓴다.
+  `message` 가 문자열 배열이면 `details` 에 싣고 `message` 는 생략한다. `statusCode`·`error` 같은 다른 필드는 내보내지 않는다.
+- **5xx** 는 `code` 만 내보낸다. 예외의 메시지·스택은 서버 로그에만 남는다 (접속 문자열 같은 내부 정보가 새지 않게).
+  서비스가 `errors.ts` 로 던진 5xx 는 의도한 응답이라 `message`·`details` 를 그대로 둔다.
+- Express 본문 파서는 `HttpException` 이 아니라 `http-errors` 꼴의 에러(413 `request entity too large` 등)를 던진다. 필터가 이것도 상태로 알아본다.
+- 실제 동작 (scm-api 로 확인): 없는 경로 → `404 NOT_FOUND`, 깨진 JSON → `400 BAD_REQUEST`, 100KB 넘는 본문 → `413 PAYLOAD_TOO_LARGE`,
+  있는 경로에 없는 메서드 → Express 는 405 가 아니라 `404 NOT_FOUND` ("Cannot DELETE /products"), zod 실패 → `400 VALIDATION_FAILED` + `details`,
+  DB 연결 실패 → `500 { "code": "INTERNAL_ERROR" }`.
+
+필터의 로그: 5xx 는 `error` 수준으로 스택과 요청 ID·method·path 를, 4xx 는 `debug` 수준으로 스택 없이 남긴다.
+4xx 는 요청 로그에 이미 상태와 요청 ID 가 한 줄 있고 클라이언트의 잘못이라 `warn` 으로 두면 소음이 된다. 조사할 때 `LOG_LEVEL=debug` 로 올리면 코드와 메시지가 보인다.
+
+## 설정
+
+설정은 `@nestjs/config` 의 **타입 있는 네임스페이스**로만 읽는다. `ConfigService.get('...')` 문자열 조회와 앱 코드의 `process.env` 는 린트가 막는다.
+
+```ts
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
+
+import { databaseConfig } from '@repo/nest-kit/config';
+
+@Injectable()
+export class SomeService {
+  constructor(
+    @Inject(databaseConfig.KEY) private readonly database: ConfigType<typeof databaseConfig>,
+  ) {}
+  // this.database.url
+}
+```
+
+| 네임스페이스      | 환경변수                                             | 값                                                                       |
+| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| `httpConfig`      | `PORT`                                               | `{ port }`                                                               |
+| `databaseConfig`  | `DATABASE_URL` (mysql://)                            | `{ url }`                                                                |
+| `messagingConfig` | `REDIS_URL` (redis(s)://, 선택)                      | `{ redisUrl }` — 없으면 프로세스 내부 버스 (다른 서비스로 전달되지 않음) |
+| `logConfig`       | `LOG_LEVEL` (기본 `log`), `LOG_FORMAT` (기본 `text`) | `{ level, format }`                                                      |
+
+- 세 서비스의 모양이 같아 네임스페이스는 `@repo/nest-kit/config` 에 한 번만 있다. 서비스마다 다른 기본값(포트, DB 이름)은 `AppModule` 에서
+  `serviceConfigModule({ defaults: { PORT: 3001, DATABASE_URL: '...' } })` 로 넘긴다.
+- **우선순위**: 프로세스 환경변수 > 실행 디렉터리(`apps/<service>`)의 `.env` > `defaults` > 스키마의 기본값. 빈 값(`PORT=`)은 기본값으로 넘어가지 않고 오류다 (`REDIS_URL=` 만 "없음"으로 본다).
+- 기동 때 모든 네임스페이스를 한 번에 검증하고, 잘못된 변수를 전부 나열한 `ConfigError` 로 멈춘다.
+- 서비스 고유 네임스페이스는 같은 함수로 만들고 `load` 로 넣는다. 스키마에 기본값을 두면 `.env` 없이도 뜬다.
+
+  ```ts
+  // apps/scm-api/src/carrier.config.ts
+  export const carrierConfig = defineConfig(
+    'carrier',
+    z.object({ CARRIER_API_URL: z.url(), CARRIER_TIMEOUT_MS: z.coerce.number().default(3000) }),
+    (env) => ({ apiUrl: env.CARRIER_API_URL, timeoutMs: env.CARRIER_TIMEOUT_MS }),
+  );
+  // app.module.ts: serviceConfigModule({ defaults, load: [carrierConfig] })
+  ```
+
+- `drizzle.config.ts` 는 Nest 밖에서 돌아 `process.env` 를 직접 읽는다.
+
+## 로그
+
+- 로거는 프로세스에 하나다. `LoggerModule`(`@repo/nest-kit/logger.module`)이 `logConfig` 로 설정한 `AppLogger`(Nest 내장 `ConsoleLogger`)를 제공하고,
+  `main.ts` 가 `app.useLogger(app.get(AppLogger))` 로 설치한다. `bufferLogs: true` 라 기동 로그도 이 로거로 나온다.
+- **클래스는 `private readonly logger = new Logger(클래스.name)`** (`@nestjs/common`) 으로 남긴다. 이 `Logger` 는 설치된 `AppLogger` 로 넘겨 주는 얇은 창구다.
+  `ConsoleLogger` 를 앱 코드에서 만들거나 주입하지 않는다 (린트가 막는다).
+- `LOG_FORMAT=json` 이면 한 줄 JSON(`level`, `pid`, `timestamp`, `message`, `context`, 그리고 메시지 뒤에 넘긴 객체의 필드), 아니면 사람이 읽는 텍스트다.
+  `LOG_LEVEL` 은 그 수준 이상만 남긴다 (`verbose` < `debug` < `log` < `warn` < `error` < `fatal`).
+- **요청 로그** (`accessLog`, `main.ts` 에서 `app.use`): 요청마다 `GET /units/SN-1 200 3ms` 한 줄과 `requestId`·`method`·`path`·`status`·`durationMs`. `/health` 는 남기지 않고, 쿼리 문자열도 남기지 않는다.
+- **요청 ID**: 클라이언트가 보낸 `x-request-id` 가 `[A-Za-z0-9_.-]{1,64}` 이면 그대로, 아니면 UUID 를 만든다. 응답 헤더 `x-request-id` 로 돌려주고 요청 로그와 에러 로그에 싣는다.
 
 ## 패키지 의존 방향
 

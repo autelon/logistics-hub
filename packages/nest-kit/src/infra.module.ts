@@ -7,6 +7,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 
 import { createDb, type AnyDb } from '@repo/db-kit/db';
@@ -18,6 +19,7 @@ import type { MessageBus } from '@repo/messaging/message-bus';
 import { RedisStreamsMessageBus } from '@repo/messaging/redis-streams';
 
 import { ApiErrorFilter } from './api-error.filter.js';
+import { databaseConfig, messagingConfig } from './config.js';
 import { CurrentDb } from './current-db.js';
 import { EventOutbox } from './event-outbox.js';
 import { MessageInbox } from './message-inbox.js';
@@ -28,11 +30,9 @@ export const MESSAGE_BUS = Symbol('MESSAGE_BUS');
 const DB_HANDLE = Symbol('DB_HANDLE');
 const AMBIENT_TRANSACTION = Symbol('AMBIENT_TRANSACTION');
 
+/** 접속 정보는 옵션이 아니라 타입 있는 설정(databaseConfig, messagingConfig)에서 주입받는다. */
 export interface InfraOptions {
-  databaseUrl: string;
   schema: Record<string, unknown>;
-  /** 없으면 프로세스 내부 버스를 쓴다(다른 서비스로는 전달되지 않음). */
-  redisUrl?: string | undefined;
 }
 
 @Injectable()
@@ -67,7 +67,12 @@ export class InfraModule {
     return {
       module: InfraModule,
       providers: [
-        { provide: DB_HANDLE, useFactory: () => createDb(options.databaseUrl, options.schema) },
+        {
+          provide: DB_HANDLE,
+          inject: [databaseConfig.KEY],
+          useFactory: (database: ConfigType<typeof databaseConfig>) =>
+            createDb(database.url, options.schema),
+        },
         {
           provide: DB,
           inject: [DB_HANDLE],
@@ -75,9 +80,10 @@ export class InfraModule {
         },
         {
           provide: MESSAGE_BUS,
-          useFactory: (): MessageBus =>
-            options.redisUrl
-              ? new RedisStreamsMessageBus(options.redisUrl)
+          inject: [messagingConfig.KEY],
+          useFactory: (messaging: ConfigType<typeof messagingConfig>): MessageBus =>
+            messaging.redisUrl
+              ? new RedisStreamsMessageBus(messaging.redisUrl)
               : new InMemoryMessageBus(),
         },
         {

@@ -7,7 +7,7 @@
 
 ```
 apps/<service>/src/
-  main.ts  app.module.ts  env.ts  errors.ts
+  main.ts  app.module.ts  errors.ts      설정은 env.ts 가 아니라 @repo/nest-kit/config 의 네임스페이스로 주입받는다
   db/schema.ts                      테이블 정의 전체 (drizzle-kit 이 읽는 단일 파일)
   domains/
     <domain>/

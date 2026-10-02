@@ -64,6 +64,8 @@
   서비스끼리 서로의 코드나 DB 를 직접 참조하지 않고, 동기 HTTP 호출도 하지 않는다.
 - **에러 응답에는 항상 문자열 `code` 가 있다.** 서비스 코드는 Nest 내장 예외 대신 자기 앱의 `errors.ts` 로 던진다 (`throw scmError('UNIT_NOT_FOUND', '보조 설명')`).
   새 코드는 `@repo/contracts` 의 해당 서비스 `*ErrorCode` 에 추가하고 `errors.ts` 에 상태를 적는다. `message` 는 선택이고, 호출 측 분기는 `code` 로만 한다.
+- **설정은 `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로만 읽는다** (`@repo/nest-kit/config`). 앱 코드의 `process.env` 와 `ConfigService` 는 린트 오류다.
+  **로그는 `new Logger(클래스.name)`** 으로 남긴다. `main.ts` 가 설치한 `AppLogger` 로 넘어가므로 `ConsoleLogger` 를 직접 만들지 않는다.
 - **판단 규칙은 순수 함수로 빼고 테스트한다** (예: `unit-projection.ts`, `fulfillment.ts`). 서비스 클래스에 규칙을 섞지 않는다.
 
 ## 작업 방식과 구조
