@@ -23,6 +23,7 @@
   "dependencies": {
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
+    "@repo/contracts": "workspace:*",
     "@repo/db-kit": "workspace:*",
     "@repo/messaging": "workspace:*",
     "reflect-metadata": "catalog:",

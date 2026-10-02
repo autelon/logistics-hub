@@ -1,6 +1,19 @@
 import type { OrderView } from '@repo/contracts/oms';
 import type { CorrectUnitEventInput, StockRow, UnitLifecycleView } from '@repo/contracts/scm';
 
+/** 서버가 낸 에러. 화면 분기는 code 로 하고, message 는 있으면 보여 주기만 한다. */
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(status: number, code: string, message?: string) {
+    super(message ?? code);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 const request = async <T>(path: string, post?: unknown): Promise<T> => {
   const response = await fetch(
     path,
@@ -14,9 +27,11 @@ const request = async <T>(path: string, post?: unknown): Promise<T> => {
   );
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
-    const message =
-      body && typeof body === 'object' && 'message' in body ? String(body.message) : null;
-    throw new Error(message ?? `${response.status} ${response.statusText}`);
+    const field = (key: string) =>
+      body && typeof body === 'object' && key in body
+        ? String((body as Record<string, unknown>)[key])
+        : undefined;
+    throw new ApiRequestError(response.status, field('code') ?? 'UNKNOWN', field('message'));
   }
   // 응답 형태는 @repo/contracts 의 View 타입으로 서버와 약속되어 있다.
   return (await response.json()) as T;

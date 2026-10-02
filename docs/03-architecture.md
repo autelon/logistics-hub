@@ -51,6 +51,35 @@ Kafka 로 옮길 때 `KafkaMessageBus` 클래스 하나를 추가하고 `InfraMo
 OMS 는 `processed_messages` 에 처리한 id 를 업무 변경과 같은 트랜잭션으로 기록하고,
 SCM 은 이벤트 id 를 `unit_events.idempotency_key` 로 쓴다.
 
+## 에러 응답
+
+모든 서비스의 에러 응답은 같은 모양이고 **`code` 는 항상 있다.**
+
+```json
+{ "code": "UNIT_NOT_FOUND", "message": "Unit SN-1 not found", "details": null }
+```
+
+- `code` — 문자열 에러 코드. 호출하는 쪽은 이것으로만 분기한다.
+- `message` — 사람이 읽을 보조 설명. **없을 수 있고 문구가 바뀔 수 있다.** 분기에 쓰지 않는다.
+- `details` — 코드별 부가 정보. 없을 수 있다. (`VALIDATION_FAILED` 는 필드별 사유 목록)
+
+코드는 두 층이다.
+
+| 층          | 정의 위치                                                             | 예                                                                |
+| ----------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 공통        | `@repo/contracts/common` 의 `CommonErrorCode`                         | `VALIDATION_FAILED` `BAD_REQUEST` `NOT_FOUND` `INTERNAL_ERROR`    |
+| 서비스 고유 | 각 서비스 규격 파일의 `ScmErrorCode` · `OmsErrorCode` · `AsErrorCode` | `UNIT_EVENT_ALREADY_CORRECTED` `UNKNOWN_SELLABLE` `CASE_NOT_OPEN` |
+
+코드 목록은 서비스의 공개 규격이므로 `contracts` 에 있고, 코드와 HTTP 상태를 묶는 표는 각 앱의 `src/errors.ts` 에 있다.
+`defineErrors<ScmErrorCode>({...})` 는 모든 코드에 상태가 있어야 컴파일되므로 코드를 추가하고 상태를 빠뜨릴 수 없다.
+
+코드 없는 응답이 나가지 않게 하는 장치는 셋이다.
+
+1. 서비스 코드는 `scmError('UNIT_NOT_FOUND', ...)` 처럼 자기 앱의 에러 함수로만 던진다. 코드 인자가 타입으로 강제된다.
+2. Nest 내장 HTTP 예외(`NotFoundException` 등)는 앱에서 import 하면 린트 오류다.
+3. 전역 필터(`ApiErrorFilter`)가 나머지를 받는다. 프레임워크가 던진 4xx 는 공통 코드를 붙이고,
+   예상하지 못한 예외는 내용을 숨긴 채 `500 { "code": "INTERNAL_ERROR" }` 만 내보내고 서버 로그에 남긴다.
+
 ## 패키지 의존 방향
 
 ```

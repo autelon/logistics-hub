@@ -38,6 +38,34 @@
       "rules": {
         "typescript/no-unsafe-type-assertion": "off"
       }
+    },
+    {
+      "files": ["**/apps/*-api/src/**/*.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@nestjs/common",
+                "importNames": [
+                  "HttpException",
+                  "BadRequestException",
+                  "UnauthorizedException",
+                  "ForbiddenException",
+                  "NotFoundException",
+                  "ConflictException",
+                  "UnprocessableEntityException",
+                  "InternalServerErrorException",
+                  "NotAcceptableException",
+                  "GoneException"
+                ],
+                "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "ignorePatterns": ["**/dist/**", "**/drizzle/**", "**/routeTree.gen.ts"]
