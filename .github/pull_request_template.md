@@ -1,4 +1,4 @@
-<!-- 제목: type(scope): 요약 — 커밋 제목 규칙과 같다. squash merge 되면 이 제목과 본문이 main 의 커밋 메시지가 된다.
+<!-- 제목: type(scope): 요약 — 커밋 제목 규칙과 같다. 이 제목과 본문이 main 의 merge commit 메시지가 된다.
      규칙 전문: docs/git-rules.md. 올리기 전에 주석과 해당 없는 항목을 지운다. -->
 
 왜:

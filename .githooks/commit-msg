@@ -3,7 +3,7 @@
 set -e
 
 # 글자 수를 바이트가 아니라 문자로 세기 위해 UTF-8 로케일을 쓴다.
-export LC_ALL=en_US.UTF-8
+export LC_ALL=C.UTF-8
 
 # 주석 줄을 뺀 실제 메시지.
 message=$(grep -v '^#' "$1" || true)
