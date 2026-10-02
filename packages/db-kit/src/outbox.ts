@@ -23,6 +23,7 @@ export const outboxEvents = mysqlTable(
   (t) => [index('outbox_unpublished_idx').on(t.publishedAt, t.id)],
 );
 
+/** application 서비스에서는 tx 를 넘기지 않는 `EventOutbox.enqueue` (`@repo/nest-kit/event-outbox`) 를 쓴다. */
 export const enqueue = async (tx: AnyDb, topic: string, key: string, payload: unknown) => {
   await tx.insert(outboxEvents).values({ id: newId(), topic, key, payload, createdAt: new Date() });
 };

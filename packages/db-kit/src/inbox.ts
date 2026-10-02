@@ -18,6 +18,7 @@ export const processedMessages = mysqlTable(
 /**
  * 업무 처리와 같은 트랜잭션 안에서 호출한다.
  * 처음 보는 메시지면 기록하고 true, 이미 처리했으면 false.
+ * usecase 에서는 tx 를 넘기지 않는 `MessageInbox.claim` (`@repo/nest-kit/message-inbox`) 을 쓴다.
  */
 export const claimMessage = async (tx: AnyDb, consumerGroup: string, messageId: string) => {
   const seen = await tx
