@@ -61,8 +61,25 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ]
+          }
+        ],
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "process",
+            "message": "앱 코드는 process(.env) 를 직접 읽지 않는다. 설정은 @repo/nest-kit/config 의 네임스페이스를 `@Inject(xConfig.KEY)` 로 주입받는다."
           }
         ]
       }
@@ -89,6 +106,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -147,6 +174,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -193,6 +230,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -231,6 +278,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -293,6 +350,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -343,6 +410,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -385,6 +462,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -427,6 +514,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
@@ -469,6 +566,16 @@
                   "GoneException"
                 ],
                 "message": "에러 코드가 없는 응답이 된다. 각 앱의 errors.ts 로 던진다 (예: scmError('UNIT_NOT_FOUND'))."
+              },
+              {
+                "name": "@nestjs/config",
+                "importNames": ["ConfigService"],
+                "message": "문자열 키 조회는 타입이 없다. `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로 주입한다 (@repo/nest-kit/config)."
+              },
+              {
+                "name": "@nestjs/common",
+                "importNames": ["ConsoleLogger"],
+                "message": "로거는 main.ts 가 설치한 AppLogger 하나다. 클래스에서는 `new Logger(클래스.name)` 을 쓴다."
               }
             ],
             "patterns": [
