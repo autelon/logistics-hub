@@ -76,7 +76,7 @@ git 은 작성자(author)와 커밋한 사람(committer)을 따로 기록한다.
 - 본문의 안내 주석(`<!-- -->`)은 지우고 올린다. 해당 없는 항목은 항목째 지운다.
 - 리뷰에서 나온 **결정**은 PR 본문이나 커밋 메시지에 반영한다. 댓글 스레드는 히스토리에 남지 않는다.
 
-이 설정은 `.github/rulesets/main.json` 과 `scripts/github-setup.sh` 에 코드로 있다. GitHub 화면에서 고치지 말고 파일을 고친 뒤 스크립트를 다시 실행한다.
+이 설정은 GitHub 저장소 설정(Rulesets, 병합 방식)에만 있고 리포에는 파일로 두지 않는다. 현재 값은 `gh api repos/{owner}/{repo}/rulesets` 로 확인한다.
 
 ## 히스토리 조사
 
