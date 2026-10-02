@@ -1,69 +1,198 @@
+<div align="center">
+
 # Logistics Hub
 
-물리 제품 한 개의 **제조 → 입고 → 출고 → 배송 → (DOA) → 폐기** 전체 생애주기를 추적하는 통합 물류 관리 시스템.
-공장·창고·배송·AS 는 각 업체 시스템이 실행하고, 이 시스템은 그 결과를 **연동해서 기록하고, 틀린 기록을 바로잡는다.**
+**Track every physical unit from factory to scrap — across systems you don't own.**
 
-동시에 NestJS + React 모노레포 템플릿이기도 하다.
+A supply chain control tower that records what partner systems report, corrects what they got wrong,
+and keeps one trustworthy history per serial number.
 
-- 왜 이렇게 만들었나 → [docs/01-concept.md](docs/01-concept.md)
-- 무엇을 어떻게 기록하나 → [docs/02-domain-model.md](docs/02-domain-model.md)
-- 서비스·패키지 구조 → [docs/03-architecture.md](docs/03-architecture.md)
-- 기술 선택과 이유 → [docs/04-decisions.md](docs/04-decisions.md)
-- 아직 안 만든 것 → [docs/05-roadmap.md](docs/05-roadmap.md)
-- 커밋·PR 규칙 → [docs/git-rules.md](docs/git-rules.md)
+![TypeScript](https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript&logoColor=white)
+![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?logo=nestjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)
+![Drizzle](https://img.shields.io/badge/Drizzle_ORM-0.45-C5F74F?logo=drizzle&logoColor=black)
+![MySQL](https://img.shields.io/badge/MySQL-9.7_LTS-4479A1?logo=mysql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis_Streams-8.10-FF4438?logo=redis&logoColor=white)
+![Turborepo](https://img.shields.io/badge/Turborepo-2-000000?logo=turborepo&logoColor=white)
+![pnpm](https://img.shields.io/badge/pnpm-12-F69220?logo=pnpm&logoColor=white)
 
-## 시작하기
+</div>
 
-필요한 것: [mise](https://mise.jdx.dev), 그리고 `docker`·`docker-compose` 명령 (Colima 기준: `brew install colima docker docker-compose && colima start`).
-MySQL 과 Redis 는 호스트에 설치하지 않고 `compose.yaml` 에 버전을 고정한 컨테이너로 띄운다.
+---
+
+## Why
+
+Factories, warehouses, carriers and service centers each run their own software. None of them
+sees the whole picture, and all of them contain mistakes: a warehouse worker scans the wrong
+serial number, and the partner's system can no longer be fixed.
+
+Logistics Hub does not replace those systems. It **integrates with them and keeps the record
+straight**:
+
+- **Record, don't execute.** Partners run the factory, the warehouse and the delivery. We record what happened to each unit.
+- **Correct, never overwrite.** A wrong report is voided with a reason and an actor, and optionally replaced. The original stays in the history.
+- **Flag, don't reject.** A report that makes no sense ("shipped before it was received") is still accepted, applied, and marked as an anomaly for a human to resolve.
+- **One unit, one timeline.** Manufactured → received → stored → shipped in order X as part of bundle Y → delivered → DOA → scrapped, all queryable by serial number.
+
+It is also a reference **NestJS + React monorepo template** built on current stable tooling:
+TypeScript 7, ESM everywhere, pnpm catalogs, Turborepo, oxlint, Vitest.
+
+> **Status:** early skeleton. The end-to-end lifecycle works across all three services; partner and
+> sales-channel adapters, authentication and non-serialized stock are not built yet.
+> See the [roadmap](docs/05-roadmap.md).
+
+## What it does
+
+```mermaid
+flowchart LR
+    M[Manufactured] --> T[In transit] --> S[In stock]
+    S -->|order| SH[Shipped] --> D[Delivered]
+    D -->|DOA confirmed| DOA[DOA] --> R[Returned] --> X[Scrapped]
+    DOA -.->|replacement| SH
+    SH -.->|report corrected| S
+```
+
+| Area                  | Capability                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit ledger** (SCM) | Append-only event history per serial number, with business time and recorded time kept separately                                 |
+| **Corrections**       | Void or replace a wrong fact; the unit's state is rebuilt from the facts that remain valid                                        |
+| **Stock**             | Quantity by SKU × location × status, derived from corrected history rather than from partner books                                |
+| **Order hub** (OMS)   | Ingest orders from sales channels, explode bundles into physical units, link each unit to the serial number that actually shipped |
+| **DOA flow**          | An after-sales system confirms DOA → the unit is marked, the order line gets a replacement shipment, the scrap is recorded        |
+
+The OMS here is deliberately narrow. Payments, refunds and customer service stay in the sales
+channel; this system only answers _which physical unit fulfilled which order line_.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    CH([Sales channels]) -->|orders| OMS[oms-api]
+    P([Partner systems]) -->|unit events| SCM[scm-api]
+    ASU([Service staff]) --> AS[as-api]
+
+    SCM -- scm.unit-events --> OMS
+    AS -- as.case-events --> SCM
+    AS -- as.case-events --> OMS
+    OMS -- oms.order-events --> W([Warehouse adapter<br/>planned])
+
+    WEB[web console] -.-> SCM & OMS & AS
+```
+
+- **Three services, three databases.** Services never read each other's tables and never call each other synchronously — they only exchange events.
+- **Transactional outbox** on the way out and **idempotent consumers** on the way in, so events are neither lost nor applied twice.
+- **Broker behind an interface.** `MessageBus` has Kafka semantics (topics, consumer groups, at-least-once). Today it runs on Redis Streams; moving to Kafka means adding one adapter class.
+- **Contracts in one package.** Event and request schemas (zod) and response types live in `@repo/contracts`, shared by the services and the web app.
+
+## Quick start
+
+Requirements: [mise](https://mise.jdx.dev) and a Docker runtime with `docker-compose`
+(for example `brew install colima docker docker-compose && colima start`).
 
 ```bash
-mise install      # node, pnpm 버전 맞추기
-mise run setup    # 의존성 설치, .env 생성, MySQL·Redis 기동, 마이그레이션
-mise run dev      # 서비스 3개 + 웹 콘솔
-mise run demo     # (다른 터미널에서) 전체 흐름을 실제 API 로 재현
+mise install      # pins Node and pnpm
+mise run setup    # install deps, create .env files, start MySQL + Redis, run migrations
+mise run dev      # three services + the web console
 ```
 
-VS Code 는 `code logistics-hub.code-workspace` 로 연다. 앱·패키지가 각각 최상위 폴더로 보인다.
+Then, in another terminal, replay a full unit lifecycle against the real APIs:
 
-| 앱        | 주소                  | 역할                                        |
-| --------- | --------------------- | ------------------------------------------- |
-| `web`     | http://localhost:5173 | 관리 콘솔 (제품 추적, 재고, 주문)           |
-| `scm-api` | http://localhost:3001 | 제품 이력 원장, 정정, 재고                  |
-| `oms-api` | http://localhost:3002 | 채널 주문 수집, 패키지 분해, 출고 항목 추적 |
-| `as-api`  | http://localhost:3003 | DOA 연동 규격 검증용 간이 AS                |
-
-## 구조
-
+```bash
+mise run demo
 ```
+
+The demo manufactures units, places a bundle order, lets the warehouse report the **wrong serial
+number**, corrects it, delivers, confirms a DOA, scraps the unit and ships a replacement.
+Abridged output (the script prints in Korean):
+
+```text
+▶ Result — lifecycle of CAM-A
+  MANUFACTURED      FAC-SZ    manufacturer
+  DISPATCHED                  manufacturer
+  RECEIVED          WH-ICN    3PL
+  SHIPPED                     logistics-hub:correction
+  DELIVERED                   carrier
+  DOA_CONFIRMED               as-api
+  RETURN_RECEIVED   SVC-SEL   service partner
+  SCRAPPED                    as-api
+  final status: SCRAPPED, anomalies: 0
+
+▶ Result — fulfillment items of the order
+  BAT-01  DELIVERED  BAT-A  ORDER
+  CAM-01  DOA        CAM-A  ORDER
+  CAM-01  DELIVERED  CAM-B  DOA_REPLACEMENT
+  order status: FULFILLED
+```
+
+| App       | URL                   | Role                                                    |
+| --------- | --------------------- | ------------------------------------------------------- |
+| `web`     | http://localhost:5173 | Admin console: unit trace, stock, orders                |
+| `scm-api` | http://localhost:3001 | Unit ledger, corrections, stock                         |
+| `oms-api` | http://localhost:3002 | Order ingestion, bundle explosion, fulfillment tracking |
+| `as-api`  | http://localhost:3003 | Minimal after-sales service for the DOA integration     |
+
+## Project structure
+
+```text
 apps/
-  scm-api  oms-api  as-api     NestJS 서비스. 각자 자기 DB 를 가진다.
-  web                          Vite + React 관리 콘솔
+  scm-api  oms-api  as-api   NestJS services, one database each
+  web                        Vite + React admin console
 packages/
-  contracts                    서비스 간 약속: 이벤트·요청 스키마(zod), 응답 타입
-  messaging                    MessageBus 인터페이스 + Redis Streams / 인메모리 구현
-  db-kit                       Drizzle 공용 부품: 아웃박스, 인박스, 컬럼 규칙
-  nest-kit                     Nest 공용 부품: 인프라 모듈, zod 파이프, env 로딩
-  typescript-config            tsconfig 프리셋
+  contracts                  Cross-service contracts: event/request schemas (zod), response types
+  messaging                  MessageBus interface + Redis Streams and in-memory adapters
+  db-kit                     Drizzle building blocks: outbox, inbox, column conventions
+  nest-kit                   Nest building blocks: infra module, zod pipe, env loading
+  typescript-config          Shared tsconfig presets
+docs/                        Design documents
 ```
 
-## 자주 쓰는 명령
+## Tech stack
 
-| 명령               | 하는 일                                                  |
-| ------------------ | -------------------------------------------------------- |
-| `pnpm check`       | 빌드 + 타입체크 + 린트 + 테스트 + 포맷 검사 (CI 와 동일) |
-| `pnpm dev`         | 전체 개발 서버                                           |
-| `pnpm test`        | 테스트                                                   |
-| `pnpm format`      | Prettier 적용                                            |
-| `pnpm db:generate` | 스키마 변경에서 마이그레이션 SQL 생성                    |
-| `pnpm db:migrate`  | 마이그레이션 적용                                        |
+| Layer     | Choice                                                    |
+| --------- | --------------------------------------------------------- |
+| Language  | TypeScript 7 (native compiler), strict settings, ESM only |
+| Backend   | NestJS 12, Drizzle ORM, MySQL 9.7 LTS, zod 4              |
+| Messaging | Redis Streams behind a Kafka-shaped `MessageBus`          |
+| Frontend  | Vite 8, React 19, TanStack Router + Query, Tailwind CSS 4 |
+| Monorepo  | pnpm 12 workspaces with catalogs, Turborepo 2, mise       |
+| Quality   | oxlint (type-aware), Prettier, Vitest 5, GitHub Actions   |
 
-한 앱만: `pnpm --filter scm-api dev`, `pnpm turbo run test --filter=oms-api`
+The reasoning behind each choice is in [docs/04-decisions.md](docs/04-decisions.md).
 
-## 규칙
+## Development
 
-- **버전은 `pnpm-workspace.yaml` 의 `catalog` 한 곳에서만** 올린다. 각 `package.json` 은 `"catalog:"` 로 참조한다.
-- **서비스끼리는 서로의 코드나 DB 를 직접 보지 않는다.** 주고받는 것은 `packages/contracts` 에 정의된 것뿐이다.
-- **이벤트는 반드시 아웃박스로 낸다** (`enqueue(tx, ...)`). 업무 데이터와 같은 트랜잭션에 묶여야 유실되지 않는다.
-- **이벤트 핸들러는 멱등이어야 한다.** 같은 메시지가 두 번 올 수 있다.
-- **제품 이력(`unit_events`)은 수정·삭제하지 않는다.** 틀렸으면 정정 기록을 추가한다.
+| Command            | What it does                                                            |
+| ------------------ | ----------------------------------------------------------------------- |
+| `pnpm check`       | Build, type-check, lint, test and format check — the same thing CI runs |
+| `pnpm dev`         | Start every app in watch mode                                           |
+| `pnpm test`        | Run tests                                                               |
+| `pnpm format`      | Format the whole repository with Prettier                               |
+| `pnpm db:generate` | Generate migration SQL from schema changes                              |
+| `pnpm db:migrate`  | Apply migrations                                                        |
+
+Target a single workspace with `pnpm --filter scm-api dev` or `pnpm turbo run test --filter=oms-api`.
+
+VS Code users: open `logistics-hub.code-workspace` to get each app and package as a top-level
+folder, with format-on-save and lint wired up.
+
+**Conventions worth knowing before you contribute**
+
+- Dependency versions live only in the `catalog` of `pnpm-workspace.yaml`.
+- No barrel files. Import by subpath: `@repo/contracts/scm`, not `@repo/contracts`.
+- Events are published through the outbox (`enqueue(tx, ...)`), never directly.
+- `unit_events` is append-only. Fix mistakes with a correction record.
+- `main` only accepts pull requests that pass CI, merged with a merge commit.
+
+## Documentation
+
+The design documents are written in Korean.
+
+| Document                                   | Contents                                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| [01 Concept](docs/01-concept.md)           | What the system does and does not do, its three principles, the boundary with OMS and after-sales |
+| [02 Domain model](docs/02-domain-model.md) | Tables, unit events and state transitions, corrections, bundles, DOA events                       |
+| [03 Architecture](docs/03-architecture.md) | Services and topics, outbox and idempotency, package dependencies                                 |
+| [04 Decisions](docs/04-decisions.md)       | Technology choices and why                                                                        |
+| [05 Roadmap](docs/05-roadmap.md)           | What is not built yet                                                                             |
+| [Git rules](docs/git-rules.md)             | Commit and pull request conventions                                                               |
