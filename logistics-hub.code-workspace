@@ -1,0 +1,128 @@
+{
+  "folders": [
+    {
+      "name": "app · web",
+      "path": "apps/web"
+    },
+    {
+      "name": "app · scm-api",
+      "path": "apps/scm-api"
+    },
+    {
+      "name": "app · oms-api",
+      "path": "apps/oms-api"
+    },
+    {
+      "name": "app · as-api",
+      "path": "apps/as-api"
+    },
+    {
+      "name": "pkg · contracts",
+      "path": "packages/contracts"
+    },
+    {
+      "name": "pkg · messaging",
+      "path": "packages/messaging"
+    },
+    {
+      "name": "pkg · db-kit",
+      "path": "packages/db-kit"
+    },
+    {
+      "name": "pkg · nest-kit",
+      "path": "packages/nest-kit"
+    },
+    {
+      "name": "pkg · typescript-config",
+      "path": "packages/typescript-config"
+    },
+    {
+      "name": "docs",
+      "path": "docs"
+    },
+    {
+      "name": "root",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "apps": true,
+      "packages": true,
+      "docs": true,
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/.turbo": true,
+      "**/*.tsbuildinfo": true
+    },
+    "search.exclude": {
+      "**/pnpm-lock.yaml": true,
+      "**/drizzle/meta": true,
+      "**/routeTree.gen.ts": true
+    },
+    "files.readonlyInclude": {
+      "**/routeTree.gen.ts": true,
+      "**/drizzle/**": true,
+      "**/pnpm-lock.yaml": true
+    },
+    "explorer.fileNesting.enabled": true,
+    "explorer.fileNesting.patterns": {
+      "*.ts": "${capture}.spec.ts",
+      "package.json": "pnpm-lock.yaml, pnpm-workspace.yaml, turbo.json, mise.toml, .oxlintrc.json, .prettierrc, .prettierignore, .editorconfig, .gitignore",
+      "tsconfig.json": "tsconfig.*.json",
+      ".env.example": ".env"
+    },
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.oxc": "explicit"
+    },
+    "eslint.enable": false,
+    "js/ts.preferences.preferTypeOnlyAutoImports": true,
+    "oxc.enable.oxfmt": false,
+    "js/ts.experimental.useTsgo": true,
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[jsonc]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[markdown]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[yaml]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[toml]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[css]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[html]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "files.associations": {
+      "*.code-workspace": "jsonc"
+    },
+    "prettier.requireConfig": true
+  },
+  "extensions": {
+    "recommendations": [
+      "oxc.oxc-vscode",
+      "esbenp.prettier-vscode",
+      "bradlc.vscode-tailwindcss",
+      "hverlin.mise-vscode",
+      "typescriptteam.native-preview"
+    ]
+  }
+}

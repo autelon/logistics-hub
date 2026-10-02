@@ -1,0 +1,22 @@
+#!/bin/sh
+# 스테이징된 파일을 Prettier 로 맞춘 뒤 다시 스테이징한다.
+# 편집기 설정과 무관하게 git 에는 같은 형식만 들어가게 하는 장치다.
+# 주의: 일부만 스테이징한 파일은 파일 전체가 스테이징된다.
+set -e
+
+# 추가·수정·이름 변경된 파일이 없으면 할 일이 없다.
+if git diff --cached --quiet --diff-filter=ACMR; then
+  exit 0
+fi
+
+# GUI git 클라이언트처럼 mise 가 활성화되지 않은 환경에서도 고정된 node/pnpm 을 쓴다.
+if command -v mise >/dev/null 2>&1; then
+  run="mise exec --"
+else
+  run=""
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+git diff --cached --name-only --diff-filter=ACMR -z |
+  xargs -0 $run pnpm exec prettier --write --ignore-unknown --log-level warn
+git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 git add

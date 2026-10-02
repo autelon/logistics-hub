@@ -1,0 +1,29 @@
+# 로컬 개발용 인프라. 서비스마다 DB 를 따로 쓰되 MySQL 인스턴스는 하나만 띄운다.
+services:
+  mysql:
+    image: mysql:9.7 # LTS
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./infra/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-proot']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:8.10-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  mysql-data:

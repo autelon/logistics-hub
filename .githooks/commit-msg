@@ -1,0 +1,35 @@
+#!/bin/sh
+# 커밋 메시지가 docs/git-rules.md 의 형식을 따르는지 검사한다.
+set -e
+
+# 글자 수를 바이트가 아니라 문자로 세기 위해 UTF-8 로케일을 쓴다.
+export LC_ALL=en_US.UTF-8
+
+# 주석 줄을 뺀 실제 메시지.
+message=$(grep -v '^#' "$1" || true)
+subject=$(printf '%s\n' "$message" | head -n 1)
+
+# git 이 만들어 주는 메시지는 그대로 둔다.
+case "$subject" in
+  "Merge "* | "Revert "* | "fixup! "* | "squash! "* | "amend! "*) exit 0 ;;
+esac
+
+fail() {
+  echo "커밋 메시지 규칙 위반: $1" >&2
+  echo "  제목: $subject" >&2
+  echo "  규칙: docs/git-rules.md" >&2
+  exit 1
+}
+
+types='feat|fix|refactor|perf|test|docs|build|ci|chore'
+scope='[a-z0-9-]+(,[a-z0-9-]+)*'
+printf '%s\n' "$subject" | grep -Eq "^($types)(\(($scope)\))?!?: .+" ||
+  fail "제목은 'type(scope): 요약' 형식이어야 한다 (type: $types)"
+
+[ "$(printf '%s' "$subject" | wc -m)" -le 72 ] || fail "제목은 72자 이내여야 한다"
+
+# 동작이나 구조를 바꾸는 커밋은 이유를 적은 본문이 있어야 한다. 트레일러만 있는 것은 본문이 아니다.
+if printf '%s\n' "$subject" | grep -Eq '^(feat|fix|refactor|perf)'; then
+  body=$(printf '%s\n' "$message" | tail -n +2 | grep -Ev '^[[:space:]]*$' | grep -Ev '^[A-Za-z-]+: ' || true)
+  [ -n "$body" ] || fail "feat/fix/refactor/perf 는 본문(왜, 결정, 검증)이 필요하다"
+fi

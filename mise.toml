@@ -1,0 +1,29 @@
+# 개발 도구 버전 고정. `mise install` 한 번으로 node/pnpm 이 맞춰진다.
+[tools]
+node = '24'  # Active LTS
+pnpm = '12.8.1'  # package.json 의 packageManager 와 동일하게 유지
+
+[tasks.'infra:up']
+description = '로컬 MySQL + Redis 기동'
+run = 'docker-compose up -d --wait'
+
+[tasks.'infra:down']
+description = '로컬 인프라 중지'
+run = 'docker-compose down'
+
+[tasks.setup]
+description = '의존성 설치 → .env 준비 → 인프라 기동 → 마이그레이션'
+run = [
+  'pnpm install',
+  'for app in apps/*-api; do cp -n $app/.env.example $app/.env || true; done',
+  'mise run infra:up',
+  'pnpm db:migrate',
+]
+
+[tasks.demo]
+description = '제품 한 개의 전체 생애주기를 실제 API 로 재현 (서비스가 떠 있어야 함)'
+run = 'node scripts/demo.mjs'
+
+[tasks.dev]
+description = '전체 앱 개발 서버'
+run = 'pnpm dev'
