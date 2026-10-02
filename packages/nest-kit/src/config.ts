@@ -126,8 +126,5 @@ export const serviceConfigModule = (options: {
     load: configs,
     validate: validateEnv(configs, options.defaults),
   });
-  // 검증 실패는 이 promise 의 거부로 전달되고 NestFactory.create 가 받아 기동을 중단한다.
-  // 그 전에 "처리되지 않은 거부"로 프로세스가 먼저 죽지 않게 표시만 해 둔다.
-  module.catch(() => undefined);
   return module;
 };
