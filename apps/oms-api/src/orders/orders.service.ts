@@ -8,6 +8,7 @@ import type { ScmUnitMessage } from '@repo/contracts/scm';
 import { newId } from '@repo/db-kit/columns';
 import { claimMessage } from '@repo/db-kit/inbox';
 import { enqueue } from '@repo/db-kit/outbox';
+import { nextPublicId } from '@repo/db-kit/public-id';
 import { DB } from '@repo/nest-kit/infra.module';
 
 import type { Db, Tx } from '../db/db.js';
@@ -68,6 +69,7 @@ export class OrdersService {
       const now = new Date();
       const order: OrderRow = {
         id: newId(),
+        publicId: await nextPublicId(tx, 'ORD', now),
         channel: request.channel,
         channelOrderNo: request.channelOrderNo,
         orderedAt: new Date(request.orderedAt),
@@ -242,7 +244,7 @@ export class OrdersService {
     const rows = await tx
       .select({ sellable: sellables, component: sellableComponents })
       .from(sellables)
-      .innerJoin(sellableComponents, eq(sellableComponents.sellableCode, sellables.code))
+      .innerJoin(sellableComponents, eq(sellableComponents.sellableId, sellables.id))
       .where(inArray(sellables.code, codes))
       .orderBy(asc(sellables.code), asc(sellableComponents.sku));
 
@@ -251,7 +253,12 @@ export class OrdersService {
       SellableDefinition & { components: { sku: string; quantity: number }[] }
     >();
     for (const { sellable, component } of rows) {
-      const definition = result.get(sellable.code) ?? { ...sellable, components: [] };
+      const definition = result.get(sellable.code) ?? {
+        code: sellable.code,
+        name: sellable.name,
+        kind: sellable.kind,
+        components: [],
+      };
       definition.components.push({ sku: component.sku, quantity: component.quantity });
       result.set(sellable.code, definition);
     }
@@ -276,6 +283,7 @@ export class OrdersService {
       const orderItems = items.filter((i) => i.orderId === order.id);
       return {
         id: order.id,
+        publicId: order.publicId,
         channel: order.channel,
         channelOrderNo: order.channelOrderNo,
         orderedAt: order.orderedAt.toISOString(),
