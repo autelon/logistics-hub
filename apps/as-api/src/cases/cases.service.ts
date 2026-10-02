@@ -11,6 +11,7 @@ import type {
 import { makeEvent, Topics } from '@repo/contracts/common';
 import { newId } from '@repo/db-kit/columns';
 import { enqueue } from '@repo/db-kit/outbox';
+import { nextPublicId } from '@repo/db-kit/public-id';
 import { DB } from '@repo/nest-kit/infra.module';
 
 import type { Db, Tx } from '../db/db.js';
@@ -31,17 +32,22 @@ export class CasesService {
   constructor(@Inject(DB) private readonly db: Db) {}
 
   async open(request: OpenCaseRequest): Promise<ServiceCaseView> {
-    const row: CaseRow = {
-      id: newId(),
-      ...request,
-      status: 'OPEN',
-      disposition: null,
-      openedAt: new Date(),
-      confirmedAt: null,
-      scrappedAt: null,
-    };
-    await this.db.insert(serviceCases).values(row);
-    return toView(row);
+    // 접수 번호 발급과 저장이 같은 트랜잭션이어야 번호가 겹치지 않는다.
+    return this.db.transaction(async (tx) => {
+      const openedAt = new Date();
+      const row: CaseRow = {
+        id: newId(),
+        publicId: await nextPublicId(tx, 'CASE', openedAt),
+        ...request,
+        status: 'OPEN',
+        disposition: null,
+        openedAt,
+        confirmedAt: null,
+        scrappedAt: null,
+      };
+      await tx.insert(serviceCases).values(row);
+      return toView(row);
+    });
   }
 
   async list(): Promise<ServiceCaseView[]> {

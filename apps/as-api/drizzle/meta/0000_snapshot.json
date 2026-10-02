@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "3818cc8a-cd9c-4e65-b468-4579e2f3a163",
+  "id": "7e86f5aa-9ecf-4ad9-8977-d213c0f18e3e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "outbox_events": {
@@ -72,12 +72,64 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
+    "public_id_counters": {
+      "name": "public_id_counters",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last": {
+          "name": "last",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "public_id_counters_id": {
+          "name": "public_id_counters_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "public_id_counters_scope_unique": {
+          "name": "public_id_counters_scope_unique",
+          "columns": [
+            "scope"
+          ]
+        }
+      },
+      "checkConstraint": {}
+    },
     "service_cases": {
       "name": "service_cases",
       "columns": {
         "id": {
           "name": "id",
           "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -164,7 +216,14 @@
           ]
         }
       },
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "service_cases_publicId_unique": {
+          "name": "service_cases_publicId_unique",
+          "columns": [
+            "public_id"
+          ]
+        }
+      },
       "checkConstraint": {}
     }
   },
