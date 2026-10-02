@@ -17,6 +17,11 @@ export type FulfillmentItemStatus = z.infer<typeof FulfillmentItemStatus>;
 export const FulfillmentReason = z.enum(['ORDER', 'DOA_REPLACEMENT']);
 export type FulfillmentReason = z.infer<typeof FulfillmentReason>;
 
+// ---------- 에러 코드 ----------
+
+export const OmsErrorCode = z.enum(['ORDER_NOT_FOUND', 'UNKNOWN_SELLABLE']);
+export type OmsErrorCode = z.infer<typeof OmsErrorCode>;
+
 // ---------- HTTP 요청 ----------
 
 /** 판매 상품. 단품이든 패키지든 "물리 SKU 몇 개로 이루어지는가"로 정의한다. */

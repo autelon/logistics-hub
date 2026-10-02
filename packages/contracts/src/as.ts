@@ -12,6 +12,15 @@ export type DoaDisposition = z.infer<typeof DoaDisposition>;
 export const ServiceCaseStatus = z.enum(['OPEN', 'DOA_CONFIRMED', 'REJECTED', 'SCRAPPED']);
 export type ServiceCaseStatus = z.infer<typeof ServiceCaseStatus>;
 
+// ---------- 에러 코드 ----------
+
+export const AsErrorCode = z.enum([
+  'CASE_NOT_FOUND',
+  'CASE_NOT_OPEN', // 이미 판정이 끝난 케이스
+  'CASE_NOT_SCRAPPABLE', // 폐기 처분으로 DOA 확정된 케이스가 아님
+]);
+export type AsErrorCode = z.infer<typeof AsErrorCode>;
+
 // ---------- HTTP ----------
 
 export const OpenCaseRequest = z.object({

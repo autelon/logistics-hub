@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { desc, eq } from 'drizzle-orm';
 
 import type {
@@ -15,6 +15,7 @@ import { DB } from '@repo/nest-kit/infra.module';
 
 import type { Db, Tx } from '../db/db.js';
 import { serviceCases } from '../db/schema.js';
+import { asError } from '../errors.js';
 
 type CaseRow = typeof serviceCases.$inferSelect;
 
@@ -50,7 +51,7 @@ export class CasesService {
 
   async get(id: string): Promise<ServiceCaseView> {
     const [row] = await this.db.select().from(serviceCases).where(eq(serviceCases.id, id)).limit(1);
-    if (!row) throw new NotFoundException(`Case ${id} not found`);
+    if (!row) throw asError('CASE_NOT_FOUND', `Case ${id} not found`);
     return toView(row);
   }
 
@@ -59,7 +60,7 @@ export class CasesService {
     return this.db.transaction(async (tx) => {
       const current = await this.lock(tx, id);
       if (current.status !== 'OPEN') {
-        throw new ConflictException(`Case ${id} is ${current.status}, expected OPEN`);
+        throw asError('CASE_NOT_OPEN', `Case ${id} is ${current.status}, expected OPEN`);
       }
       const updated: CaseRow = {
         ...current,
@@ -88,7 +89,7 @@ export class CasesService {
     return this.db.transaction(async (tx) => {
       const current = await this.lock(tx, id);
       if (current.status !== 'OPEN') {
-        throw new ConflictException(`Case ${id} is ${current.status}, expected OPEN`);
+        throw asError('CASE_NOT_OPEN', `Case ${id} is ${current.status}, expected OPEN`);
       }
       const updated: CaseRow = { ...current, status: 'REJECTED' };
       await this.save(tx, updated);
@@ -101,7 +102,8 @@ export class CasesService {
     return this.db.transaction(async (tx) => {
       const current = await this.lock(tx, id);
       if (current.status !== 'DOA_CONFIRMED' || current.disposition !== 'SCRAP') {
-        throw new ConflictException(
+        throw asError(
+          'CASE_NOT_SCRAPPABLE',
           `Case ${id} is ${current.status}/${current.disposition ?? 'no disposition'}, expected DOA_CONFIRMED/SCRAP`,
         );
       }
@@ -123,7 +125,7 @@ export class CasesService {
 
   private async lock(tx: Tx, id: string): Promise<CaseRow> {
     const [row] = await tx.select().from(serviceCases).where(eq(serviceCases.id, id)).for('update');
-    if (!row) throw new NotFoundException(`Case ${id} not found`);
+    if (!row) throw asError('CASE_NOT_FOUND', `Case ${id} not found`);
     return row;
   }
 

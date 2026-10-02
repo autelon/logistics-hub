@@ -7,12 +7,15 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 
 import { createDb, type AnyDb } from '@repo/db-kit/db';
 import { OutboxRelay } from '@repo/db-kit/outbox';
 import { InMemoryMessageBus } from '@repo/messaging/in-memory';
 import type { MessageBus } from '@repo/messaging/message-bus';
 import { RedisStreamsMessageBus } from '@repo/messaging/redis-streams';
+
+import { ApiErrorFilter } from './api-error.filter.js';
 
 export const DB = Symbol('DB');
 export const MESSAGE_BUS = Symbol('MESSAGE_BUS');
@@ -44,7 +47,7 @@ class InfraLifecycle implements OnApplicationBootstrap, OnApplicationShutdown {
   }
 }
 
-/** DB 연결, 메시지 버스, 아웃박스 릴레이를 한 번에 제공한다. 서비스마다 AppModule 에서 한 번 등록. */
+/** DB 연결, 메시지 버스, 아웃박스 릴레이, 에러 응답 형식을 한 번에 제공한다. 서비스마다 AppModule 에서 한 번 등록. */
 @Global()
 @Module({})
 export class InfraModule {
@@ -71,6 +74,7 @@ export class InfraModule {
           useFactory: (db: AnyDb, bus: MessageBus) => new OutboxRelay(db, bus),
         },
         InfraLifecycle,
+        { provide: APP_FILTER, useClass: ApiErrorFilter },
       ],
       exports: [DB, MESSAGE_BUS, OutboxRelay],
     };

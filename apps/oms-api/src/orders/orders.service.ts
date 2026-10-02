@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-  UnprocessableEntityException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 
 import type { DoaConfirmed } from '@repo/contracts/as';
@@ -24,6 +18,7 @@ import {
   sellableComponents,
   sellables,
 } from '../db/schema.js';
+import { omsError } from '../errors.js';
 import {
   orderStatusOf,
   pickItemForShipment,
@@ -65,7 +60,7 @@ export class OrdersService {
         plan = planOrder(request.lines, definitions);
       } catch (error) {
         if (error instanceof UnknownSellableError) {
-          throw new UnprocessableEntityException(error.message);
+          throw omsError('UNKNOWN_SELLABLE', error.message, { codes: error.codes });
         }
         throw error;
       }
@@ -114,7 +109,7 @@ export class OrdersService {
 
   async get(orderId: string): Promise<OrderView> {
     const [order] = await this.db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    if (!order) throw omsError('ORDER_NOT_FOUND', `Order ${orderId} not found`);
     const [view] = await this.toViews([order]);
     return view!;
   }

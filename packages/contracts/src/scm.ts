@@ -32,6 +32,19 @@ export type UnitStatus = z.infer<typeof UnitStatus>;
 export const LocationType = z.enum(['FACTORY', 'WAREHOUSE', 'SERVICE_CENTER']);
 export type LocationType = z.infer<typeof LocationType>;
 
+// ---------- 에러 코드 ----------
+
+export const ScmErrorCode = z.enum([
+  'UNIT_NOT_FOUND',
+  'UNIT_EVENT_NOT_FOUND',
+  'UNIT_EVENT_ALREADY_CORRECTED',
+  'UNKNOWN_LOCATION',
+  'UNKNOWN_SKU',
+  'SKU_REQUIRED', // 처음 보는 시리얼인데 sku 가 없음
+  'SERIAL_SKU_MISMATCH', // 이미 다른 SKU 로 등록된 시리얼
+]);
+export type ScmErrorCode = z.infer<typeof ScmErrorCode>;
+
 // ---------- HTTP 요청 ----------
 
 export const RegisterProductRequest = z.object({

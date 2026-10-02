@@ -1,10 +1,4 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnprocessableEntityException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, eq, isNull } from 'drizzle-orm';
 
 import { makeEvent, Topics, type OrderRef } from '@repo/contracts/common';
@@ -22,6 +16,7 @@ import { DB } from '@repo/nest-kit/infra.module';
 
 import type { Db, Tx } from '../db/db.js';
 import { locations, products, unitEventCorrections, unitEvents, units } from '../db/schema.js';
+import { scmError } from '../errors.js';
 import { projectUnit } from './unit-projection.js';
 
 type UnitRow = typeof units.$inferSelect;
@@ -83,7 +78,7 @@ export class UnitsService {
         .innerJoin(units, eq(units.id, unitEvents.unitId))
         .where(eq(unitEvents.id, eventId))
         .for('update');
-      if (!found) throw new NotFoundException(`Unit event ${eventId} not found`);
+      if (!found) throw scmError('UNIT_EVENT_NOT_FOUND', `Unit event ${eventId} not found`);
       const { event: target, unit } = found;
 
       const [already] = await tx
@@ -91,7 +86,11 @@ export class UnitsService {
         .from(unitEventCorrections)
         .where(eq(unitEventCorrections.targetEventId, eventId))
         .limit(1);
-      if (already) throw new ConflictException(`Unit event ${eventId} is already corrected`);
+      if (already)
+        throw scmError(
+          'UNIT_EVENT_ALREADY_CORRECTED',
+          `Unit event ${eventId} is already corrected`,
+        );
 
       let replacement: UnitEventRow | null = null;
       if (request.replacement) {
@@ -145,7 +144,7 @@ export class UnitsService {
       .from(units)
       .where(eq(units.serialNumber, serialNumber))
       .limit(1);
-    if (!unit) throw new NotFoundException(`Unit ${serialNumber} not found`);
+    if (!unit) throw scmError('UNIT_NOT_FOUND', `Unit ${serialNumber} not found`);
 
     const rows = await this.db
       .select({ event: unitEvents, correction: unitEventCorrections })
@@ -212,7 +211,7 @@ export class UnitsService {
       .from(locations)
       .where(eq(locations.code, code))
       .limit(1);
-    if (!location) throw new UnprocessableEntityException(`Unknown location ${code}`);
+    if (!location) throw scmError('UNKNOWN_LOCATION', `Unknown location ${code}`);
   }
 
   private async lockOrCreateUnit(tx: Tx, serialNumber: string, sku: string | undefined) {
@@ -223,7 +222,8 @@ export class UnitsService {
       .for('update');
     if (existing) {
       if (sku && sku !== existing.sku) {
-        throw new ConflictException(
+        throw scmError(
+          'SERIAL_SKU_MISMATCH',
           `Serial ${serialNumber} is registered as ${existing.sku}, not ${sku}`,
         );
       }
@@ -231,14 +231,14 @@ export class UnitsService {
     }
 
     if (!sku) {
-      throw new UnprocessableEntityException(`sku is required for new serial ${serialNumber}`);
+      throw scmError('SKU_REQUIRED', `sku is required for new serial ${serialNumber}`);
     }
     const [product] = await tx
       .select({ sku: products.sku })
       .from(products)
       .where(eq(products.sku, sku))
       .limit(1);
-    if (!product) throw new UnprocessableEntityException(`Unknown sku ${sku}`);
+    if (!product) throw scmError('UNKNOWN_SKU', `Unknown sku ${sku}`);
 
     const now = new Date();
     const unit: UnitRow = {
