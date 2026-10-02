@@ -21,6 +21,9 @@ import { projectUnit } from './unit-projection.js';
 
 type UnitRow = typeof units.$inferSelect;
 type UnitEventRow = typeof unitEvents.$inferSelect;
+/** 제품 행에 외부로 내보낼 때 쓰는 SKU 코드를 붙인 것. */
+type UnitRef = UnitRow & { sku: string };
+type LocationRef = { id: string; code: string };
 
 const orderRefOf = (row: {
   orderId: string | null;
@@ -44,13 +47,13 @@ export class UnitsService {
         if (existing) return { eventId: existing.id, duplicate: true };
       }
 
-      await this.assertLocationExists(tx, request.locationCode);
+      const location = await this.resolveLocation(tx, request.locationCode);
       const unit = await this.lockOrCreateUnit(tx, request.serialNumber, request.sku);
 
       const event = await this.insertEvent(tx, unit, {
         type: request.type,
         occurredAt: new Date(request.occurredAt),
-        locationCode: request.locationCode,
+        location,
         orderRef: request.orderRef,
         caseId: request.caseId,
         sourceSystem: request.source.system,
@@ -79,7 +82,10 @@ export class UnitsService {
         .where(eq(unitEvents.id, eventId))
         .for('update');
       if (!found) throw scmError('UNIT_EVENT_NOT_FOUND', `Unit event ${eventId} not found`);
-      const { event: target, unit } = found;
+      const { event: target } = found;
+      // 기준 정보는 잠그지 않는다. 같은 SKU·거점의 다른 제품 처리까지 직렬화되기 때문이다.
+      const unit: UnitRef = { ...found.unit, sku: await this.skuOf(tx, found.unit.productId) };
+      const targetLocationCode = await this.locationCodeOf(tx, target.locationId);
 
       const [already] = await tx
         .select({ id: unitEventCorrections.id })
@@ -93,12 +99,13 @@ export class UnitsService {
         );
 
       let replacement: UnitEventRow | null = null;
+      let replacementLocation: LocationRef | null = null;
       if (request.replacement) {
-        await this.assertLocationExists(tx, request.replacement.locationCode);
+        replacementLocation = await this.resolveLocation(tx, request.replacement.locationCode);
         replacement = await this.insertEvent(tx, unit, {
           type: request.replacement.type,
           occurredAt: new Date(request.replacement.occurredAt),
-          locationCode: request.replacement.locationCode,
+          location: replacementLocation,
           orderRef: request.replacement.orderRef,
           caseId: target.caseId,
           sourceSystem: 'logistics-hub:correction',
@@ -125,12 +132,14 @@ export class UnitsService {
         Topics.scmUnitEvents,
         unit.serialNumber,
         makeEvent('scm.unit.event-voided', {
-          ...this.toPayload(unit, target),
+          ...this.toPayload(unit, target, targetLocationCode),
           reason: request.reason,
           replacementEventId: replacement?.id ?? null,
         }) satisfies UnitEventVoided,
       );
-      if (replacement) await this.announce(tx, unit, replacement);
+      if (replacement) {
+        await this.announce(tx, unit, replacement, replacementLocation?.code ?? null);
+      }
 
       await this.reproject(tx, unit.id);
       return { correctionId, replacementEventId: replacement?.id ?? null };
@@ -139,33 +148,37 @@ export class UnitsService {
 
   /** 한 제품의 생애주기 전체. 정정으로 무효화된 사실도 정정 내역과 함께 보여 준다. */
   async lifecycle(serialNumber: string): Promise<UnitLifecycleView> {
-    const [unit] = await this.db
-      .select()
+    const [found] = await this.db
+      .select({ unit: units, sku: products.sku, locationCode: locations.code })
       .from(units)
+      .innerJoin(products, eq(products.id, units.productId))
+      .leftJoin(locations, eq(locations.id, units.locationId))
       .where(eq(units.serialNumber, serialNumber))
       .limit(1);
-    if (!unit) throw scmError('UNIT_NOT_FOUND', `Unit ${serialNumber} not found`);
+    if (!found) throw scmError('UNIT_NOT_FOUND', `Unit ${serialNumber} not found`);
+    const { unit } = found;
 
     const rows = await this.db
-      .select({ event: unitEvents, correction: unitEventCorrections })
+      .select({ event: unitEvents, correction: unitEventCorrections, locationCode: locations.code })
       .from(unitEvents)
       .leftJoin(unitEventCorrections, eq(unitEventCorrections.targetEventId, unitEvents.id))
+      .leftJoin(locations, eq(locations.id, unitEvents.locationId))
       .where(eq(unitEvents.unitId, unit.id))
       .orderBy(asc(unitEvents.occurredAt), asc(unitEvents.recordedAt), asc(unitEvents.id));
 
     return {
       serialNumber: unit.serialNumber,
-      sku: unit.sku,
+      sku: found.sku,
       status: unit.status,
-      locationCode: unit.locationCode,
+      locationCode: found.locationCode,
       orderRef: orderRefOf(unit),
       anomalies: unit.anomalies,
-      events: rows.map(({ event, correction }) => ({
+      events: rows.map(({ event, correction, locationCode }) => ({
         id: event.id,
         type: event.type,
         occurredAt: event.occurredAt.toISOString(),
         recordedAt: event.recordedAt.toISOString(),
-        locationCode: event.locationCode,
+        locationCode,
         orderRef: orderRefOf(event),
         caseId: event.caseId,
         source: { system: event.sourceSystem, ref: event.sourceRef },
@@ -185,56 +198,86 @@ export class UnitsService {
   async stock(): Promise<StockRow[]> {
     return this.db
       .select({
-        sku: units.sku,
-        locationCode: units.locationCode,
+        sku: products.sku,
+        locationCode: locations.code,
         status: units.status,
         quantity: count(),
       })
       .from(units)
-      .groupBy(units.sku, units.locationCode, units.status)
-      .orderBy(asc(units.sku), asc(units.locationCode), asc(units.status));
+      .innerJoin(products, eq(products.id, units.productId))
+      .leftJoin(locations, eq(locations.id, units.locationId))
+      .groupBy(products.sku, locations.code, units.status)
+      .orderBy(asc(products.sku), asc(locations.code), asc(units.status));
   }
 
   async findSkuBySerial(serialNumber: string): Promise<string | undefined> {
     const [unit] = await this.db
-      .select({ sku: units.sku })
+      .select({ sku: products.sku })
       .from(units)
+      .innerJoin(products, eq(products.id, units.productId))
       .where(eq(units.serialNumber, serialNumber))
       .limit(1);
     return unit?.sku;
   }
 
-  private async assertLocationExists(tx: Tx, code: string | null) {
-    if (!code) return;
+  /** 거점 코드를 내부 id 로 바꾼다. 코드가 없으면(null) 거점 없는 사실이다. */
+  private async resolveLocation(tx: Tx, code: string | null): Promise<LocationRef | null> {
+    if (!code) return null;
     const [location] = await tx
-      .select({ code: locations.code })
+      .select({ id: locations.id, code: locations.code })
       .from(locations)
       .where(eq(locations.code, code))
       .limit(1);
     if (!location) throw scmError('UNKNOWN_LOCATION', `Unknown location ${code}`);
+    return location;
   }
 
-  private async lockOrCreateUnit(tx: Tx, serialNumber: string, sku: string | undefined) {
+  private async locationCodeOf(tx: Tx, locationId: string | null): Promise<string | null> {
+    if (!locationId) return null;
+    const [location] = await tx
+      .select({ code: locations.code })
+      .from(locations)
+      .where(eq(locations.id, locationId))
+      .limit(1);
+    return location?.code ?? null;
+  }
+
+  private async skuOf(tx: Tx, productId: string): Promise<string> {
+    const [product] = await tx
+      .select({ sku: products.sku })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+    if (!product) throw new Error(`Product ${productId} referenced by a unit does not exist`);
+    return product.sku;
+  }
+
+  private async lockOrCreateUnit(
+    tx: Tx,
+    serialNumber: string,
+    sku: string | undefined,
+  ): Promise<UnitRef> {
     const [existing] = await tx
       .select()
       .from(units)
       .where(eq(units.serialNumber, serialNumber))
       .for('update');
     if (existing) {
-      if (sku && sku !== existing.sku) {
+      const existingSku = await this.skuOf(tx, existing.productId);
+      if (sku && sku !== existingSku) {
         throw scmError(
           'SERIAL_SKU_MISMATCH',
-          `Serial ${serialNumber} is registered as ${existing.sku}, not ${sku}`,
+          `Serial ${serialNumber} is registered as ${existingSku}, not ${sku}`,
         );
       }
-      return existing;
+      return { ...existing, sku: existingSku };
     }
 
     if (!sku) {
       throw scmError('SKU_REQUIRED', `sku is required for new serial ${serialNumber}`);
     }
     const [product] = await tx
-      .select({ sku: products.sku })
+      .select({ id: products.id })
       .from(products)
       .where(eq(products.sku, sku))
       .limit(1);
@@ -244,9 +287,9 @@ export class UnitsService {
     const unit: UnitRow = {
       id: newId(),
       serialNumber,
-      sku,
+      productId: product.id,
       status: 'UNKNOWN',
-      locationCode: null,
+      locationId: null,
       orderId: null,
       fulfillmentItemId: null,
       anomalies: [],
@@ -254,55 +297,56 @@ export class UnitsService {
       updatedAt: now,
     };
     await tx.insert(units).values(unit);
-    return unit;
+    return { ...unit, sku };
   }
 
   private async insertEvent(
     tx: Tx,
-    unit: UnitRow,
+    unit: UnitRef,
     input: Pick<
       UnitEventRow,
-      | 'type'
-      | 'occurredAt'
-      | 'locationCode'
-      | 'caseId'
-      | 'sourceSystem'
-      | 'sourceRef'
-      | 'idempotencyKey'
-      | 'note'
-    > & { orderRef: OrderRef | null; announce?: boolean },
+      'type' | 'occurredAt' | 'caseId' | 'sourceSystem' | 'sourceRef' | 'idempotencyKey' | 'note'
+    > & { location: LocationRef | null; orderRef: OrderRef | null; announce?: boolean },
   ): Promise<UnitEventRow> {
-    const { orderRef, announce = true, ...columns } = input;
+    const { location, orderRef, announce = true, ...columns } = input;
     const event: UnitEventRow = {
       ...columns,
       id: newId(),
       unitId: unit.id,
       recordedAt: new Date(),
+      locationId: location?.id ?? null,
       orderId: orderRef?.orderId ?? null,
       fulfillmentItemId: orderRef?.fulfillmentItemId ?? null,
     };
     await tx.insert(unitEvents).values(event);
-    if (announce) await this.announce(tx, unit, event);
+    if (announce) await this.announce(tx, unit, event, location?.code ?? null);
     return event;
   }
 
-  private async announce(tx: Tx, unit: UnitRow, event: UnitEventRow) {
+  private async announce(tx: Tx, unit: UnitRef, event: UnitEventRow, locationCode: string | null) {
     await enqueue(
       tx,
       Topics.scmUnitEvents,
       unit.serialNumber,
-      makeEvent('scm.unit.event-recorded', this.toPayload(unit, event)) satisfies UnitEventRecorded,
+      makeEvent(
+        'scm.unit.event-recorded',
+        this.toPayload(unit, event, locationCode),
+      ) satisfies UnitEventRecorded,
     );
   }
 
-  private toPayload(unit: UnitRow, event: UnitEventRow): UnitEventRecorded['payload'] {
+  private toPayload(
+    unit: UnitRef,
+    event: UnitEventRow,
+    locationCode: string | null,
+  ): UnitEventRecorded['payload'] {
     return {
       eventId: event.id,
       serialNumber: unit.serialNumber,
       sku: unit.sku,
       eventType: event.type,
       occurredAt: event.occurredAt.toISOString(),
-      locationCode: event.locationCode,
+      locationCode,
       // 배송 완료는 보통 택배사가 주문 정보 없이 보고한다. 출고 때 붙은 주문을 이어 붙인다.
       orderRef: orderRefOf(event) ?? (event.type === 'DELIVERED' ? orderRefOf(unit) : null),
       caseId: event.caseId,
@@ -317,7 +361,7 @@ export class UnitsService {
         type: unitEvents.type,
         occurredAt: unitEvents.occurredAt,
         recordedAt: unitEvents.recordedAt,
-        locationCode: unitEvents.locationCode,
+        locationId: unitEvents.locationId,
         orderId: unitEvents.orderId,
         fulfillmentItemId: unitEvents.fulfillmentItemId,
       })
@@ -330,7 +374,7 @@ export class UnitsService {
       .update(units)
       .set({
         status: state.status,
-        locationCode: state.locationCode,
+        locationId: state.locationId,
         orderId: state.orderRef?.orderId ?? null,
         fulfillmentItemId: state.orderRef?.fulfillmentItemId ?? null,
         anomalies: state.anomalies,
