@@ -1,10 +1,12 @@
 CREATE TABLE `locations` (
+	`id` varchar(36) NOT NULL,
 	`code` varchar(64) NOT NULL,
 	`name` varchar(200) NOT NULL,
 	`type` varchar(32) NOT NULL,
 	`partner` varchar(100) NOT NULL,
 	`created_at` datetime(3) NOT NULL,
-	CONSTRAINT `locations_code` PRIMARY KEY(`code`)
+	CONSTRAINT `locations_id` PRIMARY KEY(`id`),
+	CONSTRAINT `locations_code_unique` UNIQUE(`code`)
 );
 --> statement-breakpoint
 CREATE TABLE `outbox_events` (
@@ -18,10 +20,12 @@ CREATE TABLE `outbox_events` (
 );
 --> statement-breakpoint
 CREATE TABLE `products` (
+	`id` varchar(36) NOT NULL,
 	`sku` varchar(64) NOT NULL,
 	`name` varchar(200) NOT NULL,
 	`created_at` datetime(3) NOT NULL,
-	CONSTRAINT `products_sku` PRIMARY KEY(`sku`)
+	CONSTRAINT `products_id` PRIMARY KEY(`id`),
+	CONSTRAINT `products_sku_unique` UNIQUE(`sku`)
 );
 --> statement-breakpoint
 CREATE TABLE `unit_event_corrections` (
@@ -41,7 +45,7 @@ CREATE TABLE `unit_events` (
 	`type` varchar(32) NOT NULL,
 	`occurred_at` datetime(3) NOT NULL,
 	`recorded_at` datetime(3) NOT NULL,
-	`location_code` varchar(64),
+	`location_id` varchar(36),
 	`order_id` varchar(100),
 	`fulfillment_item_id` varchar(100),
 	`case_id` varchar(100),
@@ -56,9 +60,9 @@ CREATE TABLE `unit_events` (
 CREATE TABLE `units` (
 	`id` varchar(36) NOT NULL,
 	`serial_number` varchar(100) NOT NULL,
-	`sku` varchar(64) NOT NULL,
+	`product_id` varchar(36) NOT NULL,
 	`status` varchar(32) NOT NULL,
-	`location_code` varchar(64),
+	`location_id` varchar(36),
 	`order_id` varchar(100),
 	`fulfillment_item_id` varchar(100),
 	`anomalies` json NOT NULL,
@@ -71,9 +75,9 @@ CREATE TABLE `units` (
 ALTER TABLE `unit_event_corrections` ADD CONSTRAINT `unit_event_corrections_target_event_id_unit_events_id_fk` FOREIGN KEY (`target_event_id`) REFERENCES `unit_events`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `unit_event_corrections` ADD CONSTRAINT `unit_event_corrections_replacement_event_id_unit_events_id_fk` FOREIGN KEY (`replacement_event_id`) REFERENCES `unit_events`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `unit_events` ADD CONSTRAINT `unit_events_unit_id_units_id_fk` FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `unit_events` ADD CONSTRAINT `unit_events_location_code_locations_code_fk` FOREIGN KEY (`location_code`) REFERENCES `locations`(`code`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `units` ADD CONSTRAINT `units_sku_products_sku_fk` FOREIGN KEY (`sku`) REFERENCES `products`(`sku`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `units` ADD CONSTRAINT `units_location_code_locations_code_fk` FOREIGN KEY (`location_code`) REFERENCES `locations`(`code`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `unit_events` ADD CONSTRAINT `unit_events_location_id_locations_id_fk` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `units` ADD CONSTRAINT `units_product_id_products_id_fk` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `units` ADD CONSTRAINT `units_location_id_locations_id_fk` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX `outbox_unpublished_idx` ON `outbox_events` (`published_at`,`id`);--> statement-breakpoint
 CREATE INDEX `unit_events_unit_idx` ON `unit_events` (`unit_id`,`occurred_at`);--> statement-breakpoint
-CREATE INDEX `units_stock_idx` ON `units` (`sku`,`location_code`,`status`);
+CREATE INDEX `units_stock_idx` ON `units` (`product_id`,`location_id`,`status`);

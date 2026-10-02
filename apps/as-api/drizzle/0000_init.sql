@@ -8,8 +8,17 @@ CREATE TABLE `outbox_events` (
 	CONSTRAINT `outbox_events_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
+CREATE TABLE `public_id_counters` (
+	`id` varchar(36) NOT NULL,
+	`scope` varchar(32) NOT NULL,
+	`last` int NOT NULL,
+	CONSTRAINT `public_id_counters_id` PRIMARY KEY(`id`),
+	CONSTRAINT `public_id_counters_scope_unique` UNIQUE(`scope`)
+);
+--> statement-breakpoint
 CREATE TABLE `service_cases` (
 	`id` varchar(36) NOT NULL,
+	`public_id` varchar(32) NOT NULL,
 	`serial_number` varchar(100) NOT NULL,
 	`origin` varchar(32) NOT NULL,
 	`symptom` varchar(500) NOT NULL,
@@ -19,7 +28,8 @@ CREATE TABLE `service_cases` (
 	`opened_at` datetime(3) NOT NULL,
 	`confirmed_at` datetime(3),
 	`scrapped_at` datetime(3),
-	CONSTRAINT `service_cases_id` PRIMARY KEY(`id`)
+	CONSTRAINT `service_cases_id` PRIMARY KEY(`id`),
+	CONSTRAINT `service_cases_publicId_unique` UNIQUE(`public_id`)
 );
 --> statement-breakpoint
 CREATE INDEX `outbox_unpublished_idx` ON `outbox_events` (`published_at`,`id`);--> statement-breakpoint

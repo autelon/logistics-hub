@@ -7,14 +7,16 @@ import { outboxEvents } from '@repo/db-kit/outbox';
 export { outboxEvents };
 
 export const products = mysqlTable('products', {
-  sku: varchar({ length: 64 }).primaryKey(),
+  id: idColumn().primaryKey(),
+  sku: varchar({ length: 64 }).notNull().unique(),
   name: varchar({ length: 200 }).notNull(),
   createdAt: utcDateTime().notNull(),
 });
 
 /** 재고가 물리적으로 있을 수 있는 곳. 운영 주체는 외부 업체다. */
 export const locations = mysqlTable('locations', {
-  code: varchar({ length: 64 }).primaryKey(),
+  id: idColumn().primaryKey(),
+  code: varchar({ length: 64 }).notNull().unique(),
   name: varchar({ length: 200 }).notNull(),
   type: varchar({ length: 32 }).$type<LocationType>().notNull(),
   partner: varchar({ length: 100 }).notNull(),
@@ -30,18 +32,18 @@ export const units = mysqlTable(
   {
     id: idColumn().primaryKey(),
     serialNumber: varchar({ length: 100 }).notNull().unique(),
-    sku: varchar({ length: 64 })
+    productId: idColumn()
       .notNull()
-      .references(() => products.sku),
+      .references(() => products.id),
     status: varchar({ length: 32 }).$type<UnitStatus>().notNull(),
-    locationCode: varchar({ length: 64 }).references(() => locations.code),
+    locationId: idColumn().references(() => locations.id),
     orderId: varchar({ length: 100 }),
     fulfillmentItemId: varchar({ length: 100 }),
     anomalies: json().$type<string[]>().notNull(),
     createdAt: utcDateTime().notNull(),
     updatedAt: utcDateTime().notNull(),
   },
-  (t) => [index('units_stock_idx').on(t.sku, t.locationCode, t.status)],
+  (t) => [index('units_stock_idx').on(t.productId, t.locationId, t.status)],
 );
 
 /**
@@ -58,7 +60,7 @@ export const unitEvents = mysqlTable(
     type: varchar({ length: 32 }).$type<UnitEventType>().notNull(),
     occurredAt: utcDateTime().notNull(),
     recordedAt: utcDateTime().notNull(),
-    locationCode: varchar({ length: 64 }).references(() => locations.code),
+    locationId: idColumn().references(() => locations.id),
     orderId: varchar({ length: 100 }),
     fulfillmentItemId: varchar({ length: 100 }),
     caseId: varchar({ length: 100 }),

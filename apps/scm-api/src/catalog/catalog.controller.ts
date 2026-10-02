@@ -7,13 +7,14 @@ import {
   type LocationView,
   type ProductView,
 } from '@repo/contracts/scm';
+import { newId } from '@repo/db-kit/columns';
 import { DB } from '@repo/nest-kit/infra.module';
 import { zod } from '@repo/nest-kit/zod.pipe';
 
 import type { Db } from '../db/db.js';
 import { locations, products } from '../db/schema.js';
 
-/** 기준 정보. 같은 키로 다시 등록하면 내용을 갱신한다. */
+/** 기준 정보. 같은 코드로 다시 등록하면 내용을 갱신한다 (id 는 처음 것이 유지된다). */
 @Controller()
 export class CatalogController {
   constructor(@Inject(DB) private readonly db: Db) {}
@@ -24,7 +25,7 @@ export class CatalogController {
   ): Promise<ProductView> {
     await this.db
       .insert(products)
-      .values({ ...body, createdAt: new Date() })
+      .values({ id: newId(), ...body, createdAt: new Date() })
       .onDuplicateKeyUpdate({ set: { name: body.name } });
     return body;
   }
@@ -43,7 +44,7 @@ export class CatalogController {
   ): Promise<LocationView> {
     await this.db
       .insert(locations)
-      .values({ ...body, createdAt: new Date() })
+      .values({ id: newId(), ...body, createdAt: new Date() })
       .onDuplicateKeyUpdate({ set: { name: body.name, type: body.type, partner: body.partner } });
     return body;
   }

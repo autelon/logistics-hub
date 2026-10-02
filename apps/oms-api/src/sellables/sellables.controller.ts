@@ -2,6 +2,7 @@ import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
 import { asc, eq } from 'drizzle-orm';
 
 import { UpsertSellableRequest, type SellableView } from '@repo/contracts/oms';
+import { newId } from '@repo/db-kit/columns';
 import { DB } from '@repo/nest-kit/infra.module';
 import { zod } from '@repo/nest-kit/zod.pipe';
 
@@ -9,7 +10,7 @@ import type { Db } from '../db/db.js';
 import { sellableComponents, sellables } from '../db/schema.js';
 import { sellableKindOf } from '../orders/fulfillment.js';
 
-/** 판매 상품(단품·패키지) 정의. 같은 코드로 다시 보내면 구성을 통째로 바꾼다. */
+/** 판매 상품(단품·패키지) 정의. 같은 코드로 다시 보내면 구성을 통째로 바꾼다 (id 는 처음 것이 유지된다). */
 @Controller('sellables')
 export class SellablesController {
   constructor(@Inject(DB) private readonly db: Db) {}
@@ -28,12 +29,18 @@ export class SellablesController {
     await this.db.transaction(async (tx) => {
       await tx
         .insert(sellables)
-        .values({ code: body.code, name: body.name, kind, createdAt: new Date() })
+        .values({ id: newId(), code: body.code, name: body.name, kind, createdAt: new Date() })
         .onDuplicateKeyUpdate({ set: { name: body.name, kind } });
-      await tx.delete(sellableComponents).where(eq(sellableComponents.sellableCode, body.code));
+      const [sellable] = await tx
+        .select({ id: sellables.id })
+        .from(sellables)
+        .where(eq(sellables.code, body.code))
+        .for('update');
+      const sellableId = sellable!.id;
+      await tx.delete(sellableComponents).where(eq(sellableComponents.sellableId, sellableId));
       await tx
         .insert(sellableComponents)
-        .values(components.map((c) => ({ ...c, sellableCode: body.code })));
+        .values(components.map((c) => ({ ...c, id: newId(), sellableId })));
     });
     return { code: body.code, name: body.name, kind, components };
   }
@@ -43,7 +50,7 @@ export class SellablesController {
     const rows = await this.db
       .select({ sellable: sellables, component: sellableComponents })
       .from(sellables)
-      .innerJoin(sellableComponents, eq(sellableComponents.sellableCode, sellables.code))
+      .innerJoin(sellableComponents, eq(sellableComponents.sellableId, sellables.id))
       .orderBy(asc(sellables.code), asc(sellableComponents.sku));
 
     const views = new Map<string, SellableView>();

@@ -37,6 +37,8 @@ export type ConfirmDoaRequest = z.infer<typeof ConfirmDoaRequest>;
 
 export interface ServiceCaseView {
   id: string;
+  /** 사람이 읽는 접수 번호 (`CASE-2026-000045`). 조회 경로는 여전히 `id` 다. */
+  publicId: string;
   serialNumber: string;
   origin: DoaOrigin;
   symptom: string;

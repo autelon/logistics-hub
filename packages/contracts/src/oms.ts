@@ -75,6 +75,8 @@ export interface OrderLineView {
 }
 export interface OrderView {
   id: string;
+  /** 사람이 읽는 주문 번호 (`ORD-2026-000123`). 조회 경로는 여전히 `id` 다. */
+  publicId: string;
   channel: string;
   channelOrderNo: string;
   orderedAt: string;

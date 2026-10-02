@@ -6,13 +6,13 @@ export interface LifecycleFact {
   type: UnitEventType;
   occurredAt: Date;
   recordedAt: Date;
-  locationCode: string | null;
+  locationId: string | null;
   orderRef: OrderRef | null;
 }
 
 export interface UnitState {
   status: UnitStatus;
-  locationCode: string | null;
+  locationId: string | null;
   orderRef: OrderRef | null;
   anomalies: string[];
 }
@@ -54,7 +54,7 @@ export const projectUnit = (facts: readonly LifecycleFact[]): UnitState => {
       a.id.localeCompare(b.id),
   );
 
-  const state: UnitState = { status: 'UNKNOWN', locationCode: null, orderRef: null, anomalies: [] };
+  const state: UnitState = { status: 'UNKNOWN', locationId: null, orderRef: null, anomalies: [] };
 
   for (const fact of ordered) {
     const rule = RULES[fact.type];
@@ -64,10 +64,10 @@ export const projectUnit = (facts: readonly LifecycleFact[]): UnitState => {
     }
 
     if (ARRIVES.has(fact.type)) {
-      if (fact.locationCode) state.locationCode = fact.locationCode;
+      if (fact.locationId) state.locationId = fact.locationId;
       else if (fact.type !== 'STORED') state.anomalies.push(`${at} ${fact.type}: 거점 정보 없음`);
     } else if (LEAVES.has(fact.type)) {
-      state.locationCode = null;
+      state.locationId = null;
     }
 
     if (fact.type === 'SHIPPED') {

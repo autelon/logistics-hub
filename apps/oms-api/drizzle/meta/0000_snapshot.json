@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "77443e2f-b9ff-4626-bee0-d519cd6b2d08",
+  "id": "536c14a7-94f9-46e9-b0a0-27343f2443fc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "fulfillment_items": {
@@ -245,6 +245,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "public_id": {
+          "name": "public_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "channel": {
           "name": "channel",
           "type": "varchar(50)",
@@ -285,6 +292,12 @@
         }
       },
       "uniqueConstraints": {
+        "orders_publicId_unique": {
+          "name": "orders_publicId_unique",
+          "columns": [
+            "public_id"
+          ]
+        },
         "orders_channel_order_uq": {
           "name": "orders_channel_order_uq",
           "columns": [
@@ -366,6 +379,13 @@
     "processed_messages": {
       "name": "processed_messages",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "consumer_group": {
           "name": "consumer_group",
           "type": "varchar(100)",
@@ -391,23 +411,82 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "processed_messages_consumer_group_message_id_pk": {
-          "name": "processed_messages_consumer_group_message_id_pk",
+        "processed_messages_id": {
+          "name": "processed_messages_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "processed_messages_group_message_uq": {
+          "name": "processed_messages_group_message_uq",
           "columns": [
             "consumer_group",
             "message_id"
           ]
         }
       },
-      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "public_id_counters": {
+      "name": "public_id_counters",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last": {
+          "name": "last",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "public_id_counters_id": {
+          "name": "public_id_counters_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "public_id_counters_scope_unique": {
+          "name": "public_id_counters_scope_unique",
+          "columns": [
+            "scope"
+          ]
+        }
+      },
       "checkConstraint": {}
     },
     "sellable_components": {
       "name": "sellable_components",
       "columns": {
-        "sellable_code": {
-          "name": "sellable_code",
-          "type": "varchar(64)",
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sellable_id": {
+          "name": "sellable_id",
+          "type": "varchar(36)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -429,35 +508,49 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "sellable_components_sellable_code_sellables_code_fk": {
-          "name": "sellable_components_sellable_code_sellables_code_fk",
+        "sellable_components_sellable_id_sellables_id_fk": {
+          "name": "sellable_components_sellable_id_sellables_id_fk",
           "tableFrom": "sellable_components",
           "tableTo": "sellables",
           "columnsFrom": [
-            "sellable_code"
+            "sellable_id"
           ],
           "columnsTo": [
-            "code"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
-        "sellable_components_sellable_code_sku_pk": {
-          "name": "sellable_components_sellable_code_sku_pk",
+        "sellable_components_id": {
+          "name": "sellable_components_id",
           "columns": [
-            "sellable_code",
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "sellable_components_sellable_sku_uq": {
+          "name": "sellable_components_sellable_sku_uq",
+          "columns": [
+            "sellable_id",
             "sku"
           ]
         }
       },
-      "uniqueConstraints": {},
       "checkConstraint": {}
     },
     "sellables": {
       "name": "sellables",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "code": {
           "name": "code",
           "type": "varchar(64)",
@@ -490,14 +583,21 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "sellables_code": {
-          "name": "sellables_code",
+        "sellables_id": {
+          "name": "sellables_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "sellables_code_unique": {
+          "name": "sellables_code_unique",
           "columns": [
             "code"
           ]
         }
       },
-      "uniqueConstraints": {},
       "checkConstraint": {}
     }
   },
