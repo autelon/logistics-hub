@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  # 이 job 이름(check)이 main 병합의 필수 조건이다. 바꾸면 .github/rulesets/main.json 도 같이 바꾼다.
+  # 이 job 이름(check)이 main 병합의 필수 조건이다. 이름을 바꾸면 GitHub 의 main 규칙(필수 검사)도 같이 바꿔야 한다.
   check:
     runs-on: ubuntu-latest
     steps:
