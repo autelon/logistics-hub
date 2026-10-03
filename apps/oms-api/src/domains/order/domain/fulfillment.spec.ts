@@ -4,7 +4,6 @@ import {
   orderStatusOf,
   pickItemForShipment,
   planOrder,
-  sellableKindOf,
   UnknownSellableError,
   type SellableDefinition,
 } from './fulfillment.js';
@@ -27,19 +26,6 @@ const sellables = new Map<string, SellableDefinition>([
     },
   ],
 ]);
-
-describe('sellableKindOf', () => {
-  it('구성품 1종 1개만 단품이다', () => {
-    expect(sellableKindOf([{ sku: 'A', quantity: 1 }])).toBe('SINGLE');
-    expect(sellableKindOf([{ sku: 'A', quantity: 2 }])).toBe('PACKAGE');
-    expect(
-      sellableKindOf([
-        { sku: 'A', quantity: 1 },
-        { sku: 'B', quantity: 1 },
-      ]),
-    ).toBe('PACKAGE');
-  });
-});
 
 describe('planOrder', () => {
   it('패키지를 주문 수량만큼 물리 단위로 푼다', () => {

@@ -1,5 +1,6 @@
 import type { FulfillmentItemStatus, SellableKind } from '@repo/contracts/oms';
 
+/** 주문을 풀기 위해 주문 도메인이 판매 상품에 대해 알아야 하는 것. 정의 자체는 sellable 도메인이 갖고, usecase 가 읽어서 넘긴다. */
 export interface SellableDefinition {
   code: string;
   name: string;
@@ -22,11 +23,6 @@ export class UnknownSellableError extends Error {
     super(`Unknown sellable: ${codes.join(', ')}`);
   }
 }
-
-export const sellableKindOf = (
-  components: readonly { sku: string; quantity: number }[],
-): SellableKind =>
-  components.length === 1 && components[0]?.quantity === 1 ? 'SINGLE' : 'PACKAGE';
 
 /** 주문 줄을 물리 출고 단위로 푼다. 패키지 2개 주문이면 구성품 전체가 2벌 나온다. */
 export const planOrder = (
@@ -73,8 +69,10 @@ export const pickItemForShipment = <T extends PendingCandidate>(
   return pending[0];
 };
 
+export type OrderStatus = 'OPEN' | 'FULFILLED';
+
 /** 취소·불량으로 빠진 항목을 뺀 나머지가 전부 배송 완료면 주문이 채워진 것이다. */
-export const orderStatusOf = (statuses: readonly FulfillmentItemStatus[]): 'OPEN' | 'FULFILLED' => {
+export const orderStatusOf = (statuses: readonly FulfillmentItemStatus[]): OrderStatus => {
   const active = statuses.filter((s) => s !== 'CANCELLED' && s !== 'DOA');
   return active.length > 0 && active.every((s) => s === 'DELIVERED') ? 'FULFILLED' : 'OPEN';
 };
