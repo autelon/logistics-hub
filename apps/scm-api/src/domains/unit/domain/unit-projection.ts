@@ -37,8 +37,13 @@ const ARRIVES: ReadonlySet<UnitEventType> = new Set([
   'STORED',
   'RETURN_RECEIVED',
 ]);
-/** 제품이 거점을 떠나는 사실. */
-const LEAVES: ReadonlySet<UnitEventType> = new Set(['DISPATCHED', 'SHIPPED', 'SCRAPPED']);
+/** 제품이 거점을 떠나는 사실. 배송 완료도 포함한다: 출고가 무효화되어도 고객 손에 있는 제품이 거점에 남지 않는다. */
+const LEAVES: ReadonlySet<UnitEventType> = new Set([
+  'DISPATCHED',
+  'SHIPPED',
+  'DELIVERED',
+  'SCRAPPED',
+]);
 
 /**
  * 유효한 사실들을 일어난 순서대로 접어 현재 상태를 만든다.

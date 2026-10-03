@@ -89,6 +89,20 @@ describe('projectUnit', () => {
     expect(state.anomalies).toEqual(['2026-01-04T00:00:00.000Z SHIPPED: 주문 정보 없음']);
   });
 
+  it('배송 완료는 거점을 비운다: 출고가 무효화되어 입고 뒤 배송 완료만 남아도 고객 손에 있다', () => {
+    const state = projectUnit([
+      fact('MANUFACTURED', 1, { locationId: 'FAC' }),
+      fact('DISPATCHED', 2),
+      fact('RECEIVED', 3, { locationId: 'WH' }),
+      fact('DELIVERED', 4),
+    ]);
+    expect(state.status).toBe('DELIVERED');
+    expect(state.locationId).toBeNull();
+    expect(state.anomalies).toEqual([
+      '2026-01-04T00:00:00.000Z DELIVERED: IN_STOCK 상태에서 올 수 없는 사실',
+    ]);
+  });
+
   it('DOA 확정 → 회수 → 폐기: 회수되어도 불량 상태를 유지하고 폐기로 끝난다', () => {
     const base = [
       fact('MANUFACTURED', 1, { locationId: 'FAC' }),
