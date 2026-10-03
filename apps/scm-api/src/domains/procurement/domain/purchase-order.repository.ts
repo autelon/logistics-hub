@@ -17,6 +17,15 @@ export interface PurchaseOrderRepository {
    * (REPEATABLE READ 의 스냅샷은 첫 일반 읽기 때 잡히므로, 그 뒤에 잠금을 얻으면 먼저 커밋된 변경을 못 본다).
    */
   findByPoNumberForUpdate(poNumber: string): Promise<PurchaseOrderDetail | undefined>;
+  /** 발주 번호 → 발주 id. 모르는 번호는 들어 있지 않다. 잠그지 않는다. */
+  findIdsByPoNumbers(poNumbers: readonly string[]): Promise<Map<string, string>>;
+  /** 발주들을 읽는다(입력 순서와 무관). 없는 id 는 결과에 없다. */
+  findByIds(ids: readonly string[]): Promise<PurchaseOrderDetail[]>;
+  /**
+   * 발주 행들을 id 순으로 잠그고 읽는다. 여러 발주를 한꺼번에 잠가야 하는 쪽이 같은 순서로 잠그게 해서 교착을 피한다.
+   * 트랜잭션의 첫 쿼리로 부른다 (`findByPoNumberForUpdate` 와 같은 이유).
+   */
+  findByIdsForUpdate(ids: readonly string[]): Promise<PurchaseOrderDetail[]>;
   /** 최신순(만든 순서의 역순). */
   listRecent(limit: number): Promise<PurchaseOrderDetail[]>;
 

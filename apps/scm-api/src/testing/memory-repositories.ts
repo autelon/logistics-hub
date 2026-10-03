@@ -91,6 +91,9 @@ export class MemoryUnitRepository implements UnitRepository {
     this.units.push(saved);
     return Promise.resolve(saved);
   }
+  createUnits(units: readonly Omit<Unit, 'id'>[]) {
+    return Promise.all(units.map((unit) => this.createUnit(unit)));
+  }
   updateState(unitId: string, state: UnitState, updatedAt: Date) {
     const unit = this.units.find((u) => u.id === unitId);
     if (unit) Object.assign(unit, state, { updatedAt });
