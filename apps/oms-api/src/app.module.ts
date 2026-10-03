@@ -1,15 +1,12 @@
 import { Module } from '@nestjs/common';
 
 import { serviceConfigModule } from '@repo/nest-kit/config';
-import { HealthController } from '@repo/nest-kit/health.controller';
 import { InfraModule } from '@repo/nest-kit/infra.module';
 import { LoggerModule } from '@repo/nest-kit/logger.module';
 
 import * as schema from './db/schema.js';
-import { EventsConsumer } from './integration/events.consumer.js';
-import { OrdersController } from './orders/orders.controller.js';
-import { OrdersService } from './orders/orders.service.js';
-import { SellablesController } from './sellables/sellables.controller.js';
+import { ApiModule } from './presentation/api/api.module.js';
+import { ConsumerModule } from './presentation/consumer/consumer.module.js';
 
 @Module({
   imports: [
@@ -18,8 +15,8 @@ import { SellablesController } from './sellables/sellables.controller.js';
     }),
     LoggerModule,
     InfraModule.forRoot({ schema }),
+    ApiModule,
+    ConsumerModule,
   ],
-  controllers: [HealthController, SellablesController, OrdersController],
-  providers: [OrdersService, EventsConsumer],
 })
 export class AppModule {}
