@@ -330,7 +330,7 @@ get $SCM/purchase-orders/$PO1 | head -1 | jq -c '.lines[] | {lineNo, sku, ordere
 
 ### 11. 제품 이력: 선적 참조가 붙은 DISPATCHED
 
-`DISPATCHED` 의 출처 참조(`source.ref`)가 선적 번호다. 발주·선적 단위로 개체를 거슬러 올라갈 수 있다. 개체의 이력이 이 사실에서 시작하므로 상태 전이 표(`UNKNOWN` → `DISPATCHED` 는 허용 전이가 아님)에 따라 이상 한 줄이 붙는다 — 아래 "관찰" 참조.
+`DISPATCHED` 의 출처 참조(`source.ref`)가 선적 번호다. 발주·선적 단위로 개체를 거슬러 올라갈 수 있다. 개체의 이력은 이 사실에서 시작하고 `UNKNOWN` 에서의 `DISPATCHED` 는 정상이라 이상이 붙지 않는다(`CAM-0005`). 이미 `IN_TRANSIT` 인 개체에 다른 선적이 또 출발을 보고한 `CAM-0001` 의 두 번째 사실만 이상이다.
 
 ```sh
 get $SCM/units/CAM-0001 | head -1 | jq -c '{serialNumber, status, anomalies, events: [.events[] | {type, occurredAt, source}]}'
@@ -341,7 +341,7 @@ sql "select count(*) as units from units; select count(*) as dispatched from uni
 관찰:
 
 ```
-{"serialNumber":"CAM-0001","status":"IN_TRANSIT","anomalies":["2026-10-01T00:00:00.000Z DISPATCHED: UNKNOWN 상태에서 올 수 없는 사실","<시각> DISPATCHED: IN_TRANSIT 상태에서 올 수 없는 사실"],"events":[{"type":"DISPATCHED","occurredAt":"2026-10-01T00:00:00.000Z","source":{"system":"acme-portal","ref":"PO-2026-000001-R1"}},{"type":"DISPATCHED","occurredAt":"<시각>","source":{"system":"acme-portal","ref":"UNLINKED-<id>"}}]}
+{"serialNumber":"CAM-0001","status":"IN_TRANSIT","anomalies":["<시각> DISPATCHED: IN_TRANSIT 상태에서 올 수 없는 사실"],"events":[{"type":"DISPATCHED","occurredAt":"2026-10-01T00:00:00.000Z","source":{"system":"acme-portal","ref":"PO-2026-000001-R1"}},{"type":"DISPATCHED","occurredAt":"<시각>","source":{"system":"acme-portal","ref":"UNLINKED-<id>"}}]}
 {"serialNumber":"CAM-0005","status":"IN_TRANSIT","events":[{"type":"DISPATCHED","source":{"system":"acme-portal","ref":"UNLINKED-<id>"}}]}
 units
 7
@@ -534,7 +534,7 @@ dispatched
 5000
 ```
 
-## 관찰할 것 (확정된 동작이 아니라 알아 둘 점)
+## 관찰할 것
 
-- 단계 11 의 `UNKNOWN 상태에서 올 수 없는 사실` 이상: 개체의 이력이 제조사의 출하 목록(`DISPATCHED`)에서 시작하면 상태 전이 표(`DISPATCHED` 는 `PRODUCED`·`IN_STOCK` 뒤에만 정상)에 맞지 않아 개체마다 이상이 한 줄 붙는다. 설계(06 "정책 변경 지점" 2: 개체의 이력은 처음 시리얼이 보고된 지점에서 시작한다)와 전이 표가 어긋나 있다. 전이 표를 고칠지는 정하지 않았다.
 - 단계 11 의 `CAM-0001` 두 번째 `DISPATCHED`: 다른 선적에 있는 시리얼도 사실을 남기므로(거부하지 않는다) 이력에 `IN_TRANSIT 상태에서 올 수 없는 사실` 이상이 붙는다.
+- 입고 스캔(`RECEIVED`)이나 출고 스캔(`SHIPPED`)이 개체의 첫 사실이면 지금은 `UNKNOWN 상태에서 올 수 없는 사실` 이상이 붙는다 (`projectUnit` 을 직접 불러 확인했다: `RECEIVED`·`STORED`·`SHIPPED` 모두 이상 한 줄, `DISPATCHED` 는 없음). 이 PR 에서는 바꾸지 않았다.
