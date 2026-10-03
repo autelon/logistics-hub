@@ -13,6 +13,7 @@ import type {
   StockRow,
   UnitLifecycleView,
 } from '@repo/contracts/scm';
+import type { ShipmentDetailView, ShipmentSummaryView } from '@repo/contracts/transport';
 
 /** 서버가 낸 에러. 화면 분기는 code 로 하고, message 는 있으면 보여 주기만 한다. */
 export class ApiRequestError extends Error {
@@ -67,6 +68,14 @@ export const api = {
     request<PurchaseOrderRevisionView[]>(
       `/api/scm/purchase-orders/${encodeURIComponent(poNumber)}/revisions`,
     ),
+  shipments: (query: { poNumber?: string; unlinked?: boolean }) => {
+    const params = new URLSearchParams();
+    if (query.poNumber) params.set('poNumber', query.poNumber);
+    if (query.unlinked) params.set('unlinked', 'true');
+    return request<ShipmentSummaryView[]>(`/api/scm/shipments?${params.toString()}`);
+  },
+  shipment: (shipmentNo: string) =>
+    request<ShipmentDetailView>(`/api/scm/shipments/${encodeURIComponent(shipmentNo)}`),
   correctEvent: (eventId: string, body: CorrectUnitEventInput) =>
     request<{ correctionId: string }>(`/api/scm/unit-events/${eventId}/corrections`, body),
 };

@@ -24,6 +24,38 @@ const RevisionList = ({ poNumber }: { poNumber: string }) => {
   );
 };
 
+const ShipmentList = ({ poNumber }: { poNumber: string }) => {
+  const query = useQuery({
+    queryKey: ['shipments', { poNumber }],
+    queryFn: () => api.shipments({ poNumber }),
+  });
+  return (
+    <Card title="선적 차수">
+      <QueryState {...query} empty={query.data?.length === 0} />
+      <ul className="space-y-1 text-sm">
+        {query.data?.map((shipment) => (
+          <li key={shipment.shipmentNo}>
+            <Link
+              to="/shipments/$shipmentNo"
+              params={{ shipmentNo: shipment.shipmentNo }}
+              className="font-mono text-sky-700 underline"
+            >
+              {shipment.shipmentNo}
+            </Link>{' '}
+            <span className="text-slate-500">
+              B/L {shipment.blNumber} · {shipment.mode} · 수량 {shipment.totalQty} · 시리얼{' '}
+              {shipment.serialCount}
+            </span>
+            {shipment.anomalyCount > 0 && (
+              <span className="ml-2 text-amber-700">⚠ 이상 {shipment.anomalyCount}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+};
+
 const PurchaseOrderPage = () => {
   const { poNumber } = Route.useParams();
   const query = useQuery({
@@ -85,6 +117,7 @@ const PurchaseOrderPage = () => {
                 <th className="py-1 pr-4 font-medium">줄</th>
                 <th className="py-1 pr-4 font-medium">SKU</th>
                 <th className="py-1 pr-4 text-right font-medium">주문</th>
+                <th className="py-1 pr-4 text-right font-medium">선적</th>
                 <th className="py-1 pr-4 text-right font-medium">받음</th>
                 <th className="py-1 pr-4 text-right font-medium">남음</th>
                 <th className="py-1 pr-4 font-medium">납기</th>
@@ -101,6 +134,7 @@ const PurchaseOrderPage = () => {
                   <td className="py-1.5 pr-4 tabular-nums">{line.lineNo}</td>
                   <td className="py-1.5 pr-4 font-mono">{line.sku}</td>
                   <td className="py-1.5 pr-4 text-right tabular-nums">{line.orderedQty}</td>
+                  <td className="py-1.5 pr-4 text-right tabular-nums">{line.shippedQty}</td>
                   <td className="py-1.5 pr-4 text-right tabular-nums">{line.receivedQty}</td>
                   <td className="py-1.5 pr-4 text-right tabular-nums">{line.openQty}</td>
                   <td className="py-1.5 pr-4">{line.requestedDeliveryDate}</td>
@@ -118,6 +152,8 @@ const PurchaseOrderPage = () => {
           </table>
         </div>
       </Card>
+
+      <ShipmentList poNumber={poNumber} />
 
       <RevisionList poNumber={poNumber} />
     </>

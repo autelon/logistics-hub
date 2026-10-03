@@ -15,6 +15,8 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as StockRouteImport } from './routes/stock'
 import { Route as PurchaseOrdersIndexRouteImport } from './routes/purchase-orders.index'
 import { Route as PurchaseOrdersPoNumberRouteImport } from './routes/purchase-orders.$poNumber'
+import { Route as ShipmentsIndexRouteImport } from './routes/shipments.index'
+import { Route as ShipmentsShipmentNoRouteImport } from './routes/shipments.$shipmentNo'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +48,16 @@ const PurchaseOrdersPoNumberRoute = PurchaseOrdersPoNumberRouteImport.update({
   path: '/purchase-orders/$poNumber',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShipmentsIndexRoute = ShipmentsIndexRouteImport.update({
+  id: '/shipments/',
+  path: '/shipments/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShipmentsShipmentNoRoute = ShipmentsShipmentNoRouteImport.update({
+  id: '/shipments/$shipmentNo',
+  path: '/shipments/$shipmentNo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -53,7 +65,9 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/stock': typeof StockRoute
   '/purchase-orders/$poNumber': typeof PurchaseOrdersPoNumberRoute
+  '/shipments/$shipmentNo': typeof ShipmentsShipmentNoRoute
   '/purchase-orders/': typeof PurchaseOrdersIndexRoute
+  '/shipments/': typeof ShipmentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -61,7 +75,9 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/stock': typeof StockRoute
   '/purchase-orders/$poNumber': typeof PurchaseOrdersPoNumberRoute
+  '/shipments/$shipmentNo': typeof ShipmentsShipmentNoRoute
   '/purchase-orders': typeof PurchaseOrdersIndexRoute
+  '/shipments': typeof ShipmentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -70,7 +86,9 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/stock': typeof StockRoute
   '/purchase-orders/$poNumber': typeof PurchaseOrdersPoNumberRoute
+  '/shipments/$shipmentNo': typeof ShipmentsShipmentNoRoute
   '/purchase-orders/': typeof PurchaseOrdersIndexRoute
+  '/shipments/': typeof ShipmentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -80,7 +98,9 @@ export interface FileRouteTypes {
     | '/register'
     | '/stock'
     | '/purchase-orders/$poNumber'
+    | '/shipments/$shipmentNo'
     | '/purchase-orders/'
+    | '/shipments/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -88,7 +108,9 @@ export interface FileRouteTypes {
     | '/register'
     | '/stock'
     | '/purchase-orders/$poNumber'
+    | '/shipments/$shipmentNo'
     | '/purchase-orders'
+    | '/shipments'
   id:
     | '__root__'
     | '/'
@@ -96,7 +118,9 @@ export interface FileRouteTypes {
     | '/register'
     | '/stock'
     | '/purchase-orders/$poNumber'
+    | '/shipments/$shipmentNo'
     | '/purchase-orders/'
+    | '/shipments/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -105,7 +129,9 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   StockRoute: typeof StockRoute
   PurchaseOrdersPoNumberRoute: typeof PurchaseOrdersPoNumberRoute
+  ShipmentsShipmentNoRoute: typeof ShipmentsShipmentNoRoute
   PurchaseOrdersIndexRoute: typeof PurchaseOrdersIndexRoute
+  ShipmentsIndexRoute: typeof ShipmentsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -152,6 +178,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PurchaseOrdersPoNumberRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/shipments/': {
+      id: '/shipments/'
+      path: '/shipments'
+      fullPath: '/shipments/'
+      preLoaderRoute: typeof ShipmentsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shipments/$shipmentNo': {
+      id: '/shipments/$shipmentNo'
+      path: '/shipments/$shipmentNo'
+      fullPath: '/shipments/$shipmentNo'
+      preLoaderRoute: typeof ShipmentsShipmentNoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -161,7 +201,9 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   StockRoute: StockRoute,
   PurchaseOrdersPoNumberRoute: PurchaseOrdersPoNumberRoute,
+  ShipmentsShipmentNoRoute: ShipmentsShipmentNoRoute,
   PurchaseOrdersIndexRoute: PurchaseOrdersIndexRoute,
+  ShipmentsIndexRoute: ShipmentsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
