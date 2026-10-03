@@ -1,4 +1,18 @@
 {
   "version": 1,
-  "tasks": []
+  "tasks": [
+    {
+      "id": "T-0001",
+      "title": "목표·지표 체계 제안 (docs/goals.md)",
+      "status": "done",
+      "role": "strategist",
+      "prd": null,
+      "milestone": null,
+      "depends_on": [],
+      "size": "large",
+      "handoff": "handoffs/T-0001.md",
+      "updated_at": "2026-10-04T04:00:00Z",
+      "last_synced": null
+    }
+  ]
 }
