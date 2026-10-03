@@ -162,16 +162,18 @@ The reasoning behind each choice is in [docs/04-decisions.md](docs/04-decisions.
 
 ## Development
 
-| Command            | What it does                                                            |
-| ------------------ | ----------------------------------------------------------------------- |
-| `pnpm check`       | Build, type-check, lint, test and format check — the same thing CI runs |
-| `pnpm dev`         | Start every app in watch mode                                           |
-| `pnpm test`        | Run tests                                                               |
-| `pnpm format`      | Format the whole repository with Prettier                               |
-| `pnpm db:generate` | Generate migration SQL from schema changes                              |
-| `pnpm db:migrate`  | Apply migrations                                                        |
+| Command            | What it does                                                                |
+| ------------------ | --------------------------------------------------------------------------- |
+| `pnpm check`       | Build, type-check, lint, test and format check — the same thing CI runs     |
+| `pnpm dev`         | Start every app in watch mode                                               |
+| `pnpm test`        | Run unit tests (set `TEST_DATABASE_URL` to include the DB integration test) |
+| `pnpm format`      | Format the whole repository with Prettier                                   |
+| `pnpm db:generate` | Generate migration SQL from schema changes                                  |
+| `pnpm db:migrate`  | Apply migrations                                                            |
 
 Target a single workspace with `pnpm --filter scm-api dev` or `pnpm turbo run test --filter=oms-api`.
+Automated tests stop at the unit level on purpose; anything above (HTTP, events, the web console) is verified by
+running the system against the playbooks in `docs/playbooks/` — see `docs/testing.md`.
 
 VS Code users: open `logistics-hub.code-workspace` to get each app and package as a top-level
 folder, with format-on-save and lint wired up.

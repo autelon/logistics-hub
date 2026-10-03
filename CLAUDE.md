@@ -19,11 +19,8 @@
 | 테스트 파일 하나  | `pnpm --filter oms-api exec vitest run <파일 경로>`               |
 | 마이그레이션 생성 | `pnpm db:generate` (한 앱만: `pnpm --filter scm-api db:generate`) |
 
-테스트는 순수 도메인 함수만 다룬다. DB·이벤트를 거치는 변경은 실제로 돌려서 확인한다 (`pnpm check` 통과만으로 동작한다고 말하지 않는다).
-
-1. `colima status` 가 실패하면 `colima start`, 그다음 `mise run infra:up` (MySQL, Redis 컨테이너)
-2. `pnpm db:migrate`
-3. `pnpm dev` (서비스 3개 + 웹, 백그라운드로) 후 `mise run demo` — 제조부터 정정·DOA·폐기·교체 출고까지 실제 API 로 재현하고, 중간에 기대 상태가 안 되면 실패한다
+자동 테스트는 단위 수준(도메인 순수 함수, 메모리 구현으로 돌리는 application 서비스, `TEST_DATABASE_URL` 이 있을 때의 db-kit DB 통합)까지다. e2e 테스트 코드는 두지 않는다.
+그 위(HTTP, 이벤트, 웹 콘솔)는 `docs/testing.md` 의 정책대로 서비스를 실제로 띄우고 `docs/playbooks/` 를 따라 확인한 뒤, **실제로 본 결과**를 PR 의 `검증` 에 적는다 (`pnpm check` 통과만으로 동작한다고 말하지 않는다).
 
 ## 함정
 
