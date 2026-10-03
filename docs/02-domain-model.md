@@ -24,6 +24,7 @@
 | `units`                   | 물리 제품 한 개. 현재 상태·위치·주문·`registered_at` 은 **이력에서 계산한 캐시**   |
 | `unit_events`             | 제품에 일어난 사실. **추가만 한다**                                                |
 | `unit_event_corrections`  | 정정 기록. 어떤 사실을 무효로 하고 무엇으로 대체했는지, 사유, 처리자               |
+| `stock_movements`         | 시리얼 없는(LOT·NONE) 제품의 수량 이동. **추가만 한다**. 아래 "수량 원장"          |
 | `device_requests`         | 기기 서버에 보내는 요청(`REGISTER`·`DEACTIVATE`). 상태는 저장하지 않고 계산한다    |
 | `device_request_items`    | 요청에 딸린 시리얼과 시리얼별 처리 결과. `(request_id, unit_id)` unique            |
 
@@ -82,10 +83,44 @@
 - 변경은 `location_policy_changes` 에 `actor`, 시각, 기본값이 채워진 `before`·`after` 로 남고 `GET /locations/:code/policy/changes` 가 최신순 50건을 돌려준다. 바뀌는 것이 없는 요청은 행도 이력도 만들지 않는다. 같은 거점의 동시 변경은 거점 행을 잠가 직렬화한다.
 - 거점을 다시 등록(`POST /locations`)해도 프로필은 그대로다.
 
+### 수량 원장 (`warehouse`)
+
+시리얼이 없는(`tracking_mode` 가 `LOT`·`NONE`) 제품의 재고 근거. 개체 사실(`unit_events`)이 없으므로 수량의 이동을 `stock_movements` 에 추가만 한다.
+
+| 컬럼                                 | 내용                                                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `product_id`, `lot_no`               | 제품과 로트(없으면 null. `LOT` 제품도 생략할 수 있다)                                               |
+| `from_location_id`, `to_location_id` | 한쪽이 비면 입고(출발지 없음) 또는 출고·폐기(도착지 없음). **둘 다 비면 안 된다** (zod 와 DB CHECK) |
+| `quantity`, `stock_status`           | 양의 정수(CHECK), `AVAILABLE`·`HOLD`·`QC`. 이동 하나는 재고 상태 하나만 다룬다                      |
+| `reason`                             | `GOODS_RECEIPT` `TRANSFER` `SHIPMENT` `SCRAP` `ADJUSTMENT`                                          |
+| `occurred_at`, `recorded_at`         | 현실에서 일어난 시각, 우리가 기록한 시각                                                            |
+| `source_system`, `source_ref`        | 보고한 업체와 그쪽 참조                                                                             |
+| `idempotency_key`                    | unique. 같은 키는 한 번만 기록된다                                                                  |
+| `reverses_movement_id`               | unique. 이 이동이 되돌리는 이동. unique 라 이동 하나는 한 번만 되돌릴 수 있다                       |
+
+- **기록은 대량 usecase 다.** `POST /stock-movements { movements (1..1000) }` 가 한 트랜잭션으로 기록하고 항목마다 `{ movementId, duplicate }` 를 요청 순서대로 돌려준다.
+  업체 배치 하나를 묶어 받기 위한 입구다 ([06-inbound-design.md](06-inbound-design.md) "업체 연동 방식").
+  - 모르는 SKU·거점은 `UNKNOWN_SKU`·`UNKNOWN_LOCATION`(422), 시리얼 제품은 `QUANTITY_TRACKING_ONLY`(422, 시리얼은 개체 사실로만 추적). 하나라도 걸리면 요청 전체를 기록하지 않고 에러 `details.index` 에 첫 번째로 걸린 항목 번호(0부터)를 담는다. 우리가 내리는 명령이 아니라 업체가 보고한 사실이지만, 어느 제품·거점인지 모르면 기록할 수 없어 거절한다.
+  - 같은 `idempotencyKey` 는 저장된 이동이든 같은 요청의 앞 항목이든 새로 기록하지 않고 기존 `movementId` 를 `duplicate: true` 로 돌려준다.
+  - 한계: 같은 키를 **동시에** 보내는 요청은 하나만 성공하고 나머지는 unique 위반으로 500 이 된다 (`POST /unit-events` 와 같다). 다시 보내면 `duplicate` 로 돌아온다.
+- **정정은 역분개다.** `POST /stock-movements/:id/reversal { reason, actor }` 가 출발지·도착지를 바꾼 `ADJUSTMENT` 이동을 추가한다 (제품·로트·수량·재고 상태는 같다, `reverses_movement_id` 가 원래 이동). 원래 이동은 바뀌지 않는다.
+  정정 시각이 `occurred_at`, 출처는 `logistics-hub:correction`(`source_ref` = 처리자), `note` 에 사유와 처리자. 이미 되돌렸으면 `MOVEMENT_ALREADY_REVERSED`(409), 없는 이동은 `MOVEMENT_NOT_FOUND`(404).
+  역분개도 이동이라 한 번 되돌릴 수 있다 (원래 효과가 돌아온다). 원래 이동 행을 잠근 뒤 정정 여부를 읽어 동시 정정을 줄 세운다.
+- **재고 = 들어온 합 - 나간 합.** 이동 하나는 도착지에 `+수량`, 출발지에 `-수량`이다 (`ledgerEntries`).
+
 ### 재고
 
-`GET /stock` 은 `units` 를 SKU × 거점 × 상태 × 등록 여부(`registered`)로 센 값이다. 정정이 이미 반영된 상태에서 세기 때문에
-업체 전산과 다를 수 있고, 그 차이가 바로 이 시스템이 드러내려는 것이다.
+`GET /stock` 은 시리얼 제품과 수량 제품을 같은 응답 형태(`StockRow`)로 합친다.
+
+| 구분      | 근거             | `trackingMode`             | `status`   | `registered` | `lotNo`·`stockStatus` | `quantity`                                                       |
+| --------- | ---------------- | -------------------------- | ---------- | ------------ | --------------------- | ---------------------------------------------------------------- |
+| 시리얼 행 | `units` 를 센 값 | `SERIAL`                   | 개체 상태  | 등록 여부    | null                  | 개수                                                             |
+| 수량 행   | 수량 원장의 합   | 제품의 추적 방식(LOT·NONE) | `IN_STOCK` | null         | 원장의 값             | SKU × 거점 × 로트 × 재고 상태별 (들어온 합 - 나간 합), SQL 한 번 |
+
+- 시리얼 행은 `units` 를 SKU × 거점 × 상태 × 등록 여부(`registered`)로 센 값이다. 정정이 이미 반영된 상태에서 세기 때문에 업체 전산과 다를 수 있고, 그 차이가 바로 이 시스템이 드러내려는 것이다.
+- `trackingMode` 는 행의 근거를 뜻한다. 개체로 센 행은 제품의 추적 방식이 무엇이든 `SERIAL` 이다.
+- 수량 행의 합은 SQL 한 번으로 구한다 (이동을 도착지 `+수량` 줄과 출발지 `-수량` 줄로 풀어 `UNION ALL` 한 뒤 묶는다). **합이 0 인 행은 빼고 음수는 그대로 돌려준다.** 음수는 나간 기록이 들어온 기록보다 많다는 보고 오류의 신호다.
+- 순서: 시리얼 행(SKU · 거점 · 상태 · 등록 여부 순)이 먼저, 그다음 수량 행(SKU · 거점 · 로트 · 재고 상태 순).
 
 ### 제품 등록과 기기 요청
 

@@ -36,7 +36,7 @@ post $SCM/unit-events "{\"serialNumber\":\"CAM-A-$RUN\",\"type\":\"DISPATCHED\",
 post $SCM/unit-events "{\"serialNumber\":\"CAM-A-$RUN\",\"type\":\"RECEIVED\",\"occurredAt\":\"2026-09-03T00:00:00Z\",\"locationCode\":\"WH-ICN\",\"source\":{\"system\":\"3PL B\"}}"
 ```
 
-기대: 9건 모두 201. `get $SCM/stock` 에 `{"sku":"CAM-01","locationCode":"WH-ICN","status":"IN_STOCK","registered":false,"quantity":≥2}`, `{"sku":"BAT-01","locationCode":"WH-ICN","status":"IN_STOCK","registered":false,"quantity":≥1}`.
+기대: 9건 모두 201. `get $SCM/stock` 에 `{"sku":"CAM-01","trackingMode":"SERIAL","locationCode":"WH-ICN","status":"IN_STOCK","registered":false,"lotNo":null,"stockStatus":null,"quantity":≥2}`, `{"sku":"BAT-01","trackingMode":"SERIAL","locationCode":"WH-ICN","status":"IN_STOCK","registered":false,"lotNo":null,"stockStatus":null,"quantity":≥1}`.
 
 ### 3. 키트 1개 주문
 
