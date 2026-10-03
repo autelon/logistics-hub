@@ -16,7 +16,7 @@ export class RegisterProductUsecase {
   execute(request: RegisterProductRequest): Promise<ProductView> {
     return this.tx.run(async () => {
       await this.catalog.registerProduct(request);
-      return { sku: request.sku, name: request.name };
+      return { sku: request.sku, name: request.name, trackingMode: request.trackingMode };
     });
   }
 }

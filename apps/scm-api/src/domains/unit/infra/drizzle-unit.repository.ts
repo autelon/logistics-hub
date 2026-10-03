@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import type { OrderRef } from '@repo/contracts/common';
 import { newId } from '@repo/db-kit/columns';
@@ -57,6 +57,26 @@ const toEvent = ({
 
 const toCorrection = (row: CorrectionRow): UnitEventCorrection => row;
 
+/** IN 절과 다중 행 INSERT 의 한 번 크기. 너무 크면 패킷·플랜이 부담스러워진다. */
+const CHUNK = 500;
+
+const chunked = <T>(items: readonly T[]): T[][] => {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += CHUNK) chunks.push(items.slice(i, i + CHUNK));
+  return chunks;
+};
+
+const eventRow = (event: Omit<UnitEvent, 'id'>): UnitEventRow => {
+  const { orderRef, source, ...columns } = event;
+  return {
+    ...columns,
+    id: newId(),
+    ...orderColumns(orderRef),
+    sourceSystem: source.system,
+    sourceRef: source.ref,
+  };
+};
+
 @Injectable()
 export class DrizzleUnitRepository implements UnitRepository {
   constructor(@Inject(CurrentDb) private readonly db: CurrentDb<typeof schema>) {}
@@ -81,6 +101,23 @@ export class DrizzleUnitRepository implements UnitRepository {
     return row && toUnit(row);
   }
 
+  async findBySerialsForUpdate(serialNumbers: readonly string[]): Promise<Unit[]> {
+    // 시리얼 순으로 잠가야 겹치는 목록을 동시에 등록하는 두 트랜잭션이 서로를 기다리며 멈추지 않는다.
+    const sorted = serialNumbers.toSorted();
+    const found: Unit[] = [];
+    for (const chunk of chunked(sorted)) {
+      const rows = await this.db
+        .get()
+        .select()
+        .from(units)
+        .where(inArray(units.serialNumber, chunk))
+        .orderBy(asc(units.serialNumber))
+        .for('update');
+      found.push(...rows.map(toUnit));
+    }
+    return found;
+  }
+
   async createUnit(unit: Omit<Unit, 'id'>): Promise<Unit> {
     const { orderRef, ...columns } = unit;
     const row: UnitRow = { ...columns, id: newId(), ...orderColumns(orderRef) };
@@ -96,6 +133,7 @@ export class DrizzleUnitRepository implements UnitRepository {
         status: state.status,
         locationId: state.locationId,
         ...orderColumns(state.orderRef),
+        registeredAt: state.registeredAt,
         anomalies: state.anomalies,
         updatedAt,
       })
@@ -103,16 +141,17 @@ export class DrizzleUnitRepository implements UnitRepository {
   }
 
   async addEvent(event: Omit<UnitEvent, 'id'>): Promise<UnitEvent> {
-    const { orderRef, source, ...columns } = event;
-    const row: UnitEventRow = {
-      ...columns,
-      id: newId(),
-      ...orderColumns(orderRef),
-      sourceSystem: source.system,
-      sourceRef: source.ref,
-    };
+    const row = eventRow(event);
     await this.db.get().insert(unitEvents).values(row);
     return toEvent(row);
+  }
+
+  async addEvents(events: readonly Omit<UnitEvent, 'id'>[]): Promise<UnitEvent[]> {
+    const rows = events.map(eventRow);
+    for (const chunk of chunked(rows)) {
+      await this.db.get().insert(unitEvents).values(chunk);
+    }
+    return rows.map(toEvent);
   }
 
   async findEventByIdempotencyKey(idempotencyKey: string): Promise<UnitEvent | undefined> {
@@ -146,6 +185,20 @@ export class DrizzleUnitRepository implements UnitRepository {
       .leftJoin(unitEventCorrections, eq(unitEventCorrections.targetEventId, unitEvents.id))
       .where(and(eq(unitEvents.unitId, unitId), isNull(unitEventCorrections.id)));
     return rows.map((r) => toEvent(r.event));
+  }
+
+  async listEffectiveEventsOf(unitIds: readonly string[]): Promise<UnitEvent[]> {
+    const events: UnitEvent[] = [];
+    for (const chunk of chunked(unitIds)) {
+      const rows = await this.db
+        .get()
+        .select({ event: unitEvents })
+        .from(unitEvents)
+        .leftJoin(unitEventCorrections, eq(unitEventCorrections.targetEventId, unitEvents.id))
+        .where(and(inArray(unitEvents.unitId, chunk), isNull(unitEventCorrections.id)));
+      events.push(...rows.map((r) => toEvent(r.event)));
+    }
+    return events;
   }
 
   async addCorrection(correction: Omit<UnitEventCorrection, 'id'>): Promise<UnitEventCorrection> {
@@ -197,18 +250,26 @@ export class DrizzleUnitRepository implements UnitRepository {
   }
 
   countStock(): Promise<StockCount[]> {
+    // MySQL 은 불리언 식을 0/1 로 돌려준다.
+    const registered = sql<boolean>`${units.registeredAt} is not null`.mapWith(Boolean);
     return this.db
       .get()
       .select({
         sku: products.sku,
         locationCode: locations.code,
         status: units.status,
+        registered,
         quantity: count(),
       })
       .from(units)
       .innerJoin(products, eq(products.id, units.productId))
       .leftJoin(locations, eq(locations.id, units.locationId))
-      .groupBy(products.sku, locations.code, units.status)
-      .orderBy(asc(products.sku), asc(locations.code), asc(units.status));
+      .groupBy(products.sku, locations.code, units.status, registered)
+      .orderBy(
+        asc(products.sku),
+        asc(locations.code),
+        asc(units.status),
+        asc(sql`${units.registeredAt} is not null`),
+      );
   }
 }

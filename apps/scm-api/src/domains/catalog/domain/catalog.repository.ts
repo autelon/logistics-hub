@@ -6,6 +6,7 @@ export interface CatalogRepository {
   listProducts(): Promise<Product[]>;
   findProductBySku(sku: string): Promise<Product | undefined>;
   findProductById(id: string): Promise<Product | undefined>;
+  findProductsByIds(ids: readonly string[]): Promise<Product[]>;
 
   /** 같은 code 가 있으면 내용을 갱신한다 (id 는 처음 것이 유지된다). */
   upsertLocation(input: LocationInput): Promise<void>;

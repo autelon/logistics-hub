@@ -15,6 +15,7 @@
 ```
 
 - 서비스마다 DB 가 따로 있다 (`lh_scm`, `lh_oms`, `lh_as`). 서로의 테이블을 읽지 않는다.
+  `device-api`(3004)는 DB 가 없는 **모의 기기 서버**다. 실제 기기 서버를 대신해 scm-api 와 HTTP 로만 말한다 ([기기 서버 연동](#기기-서버-연동)).
 - 서비스 간 통신은 **이벤트뿐**이다. 동기 HTTP 호출이 없어서 한 서비스가 내려가도 나머지는 계속 일하고,
   올라오면 밀린 이벤트를 처리한다.
 - 웹 콘솔은 개발 서버 프록시로 `/api/scm`, `/api/oms`, `/api/as` 를 각 서비스에 넘긴다.
@@ -43,11 +44,23 @@ Kafka 로 옮길 때 `KafkaMessageBus` 클래스 하나를 추가하고 `InfraMo
 그렇게 하면 `OutboxRelay` 가 발행하는 동안 핸들러가 아웃박스에 적으려다 서로 기다리게 된다
 (`packages/db-kit/src/outbox.integration.spec.ts` 가 실제 MySQL 로 이를 확인한다). 큐는 메모리에만 있어 프로세스가 죽으면 사라진다.
 
-| 토픽               | 내는 곳 | 받는 곳          | 메시지                                             |
-| ------------------ | ------- | ---------------- | -------------------------------------------------- |
-| `scm.unit-events`  | scm-api | oms-api          | `scm.unit.event-recorded`, `scm.unit.event-voided` |
-| `oms.order-events` | oms-api | (창고 연동 예정) | `oms.fulfillment.requested`                        |
-| `as.case-events`   | as-api  | scm-api, oms-api | `as.doa.confirmed`, `as.unit.scrapped`             |
+| 토픽                  | 내는 곳 | 받는 곳             | 메시지                                             |
+| --------------------- | ------- | ------------------- | -------------------------------------------------- |
+| `scm.unit-events`     | scm-api | oms-api             | `scm.unit.event-recorded`, `scm.unit.event-voided` |
+| `oms.order-events`    | oms-api | (창고 연동 예정)    | `oms.fulfillment.requested`                        |
+| `as.case-events`      | as-api  | scm-api, oms-api    | `as.doa.confirmed`, `as.unit.scrapped`             |
+| `scm.device-requests` | scm-api | scm-api (자기 자신) | `scm.device-request.created`                       |
+
+### 기기 서버 연동
+
+제품 등록·비활성화는 **기기 서버**(기기 활성화 등을 처리하는 별도 API 서버)가 처리한다. 허브 서비스끼리와 달리 외부 시스템이라 HTTP 로 말하되, 유실되지 않게 아웃박스를 거친다. 설계 근거는 [06-inbound-design.md](06-inbound-design.md) 의 "기기 서버와의 연동".
+
+1. 기기 요청(`device_requests` + 항목)을 만드는 트랜잭션에 `scm.device-request.created {requestId, type, count}` 를 아웃박스로 같이 적는다.
+2. scm-api 의 `DeviceRequestsConsumer` 가 받아 `POST {DEVICE_API_URL}/device-requests {requestId, type, count}` 를 부른다. 2xx 가 아니거나 연결에 실패하면 던져서 확인 처리하지 않으므로 다시 시도된다. 성공하면 `notified_at` 을 적는다 (이미 적혀 있으면 아무것도 하지 않아 멱등). HTTP 호출은 DB 트랜잭션 밖에서 한다.
+3. 기기 서버가 `GET /device-requests/:id/units?cursor=&limit=` 로 시리얼을 항목 id 순서의 커서로 페이지씩(기본 500, 최대 1000) 가져가고, `POST /device-requests/:id/results` 로 시리얼별 `SUCCEEDED`/`FAILED` 를 돌려준다 (같은 시리얼은 마지막 값이 이김, 요청에 없는 시리얼이 섞이면 `422 DEVICE_REQUEST_UNKNOWN_SERIAL` 로 통째로 거절).
+4. 운영자는 `GET /device-requests`(최근 50건과 집계), `GET /device-requests/:id`(요약과 실패 항목)로 본다.
+
+기기 서버는 같은 `requestId` 알림을 두 번 받아도 한 번만 처리해야 한다 (연동 계약). 모의 구현은 `apps/device-api` — `FAIL_SERIAL_SUFFIX` 로 끝나는 시리얼을 실패로 보고한다.
 
 ### 유실과 중복을 막는 방법
 
@@ -105,7 +118,7 @@ SCM 은 이벤트 id 를 `unit_events.idempotency_key` 로 쓴다.
 - **5xx** 는 `code` 만 내보낸다. 예외의 메시지·스택은 서버 로그에만 남는다 (접속 문자열 같은 내부 정보가 새지 않게).
   서비스가 `errors.ts` 로 던진 5xx 는 의도한 응답이라 `message`·`details` 를 그대로 둔다.
 - Express 본문 파서는 `HttpException` 이 아니라 `http-errors` 꼴의 에러(413 `request entity too large` 등)를 던진다. 필터가 이것도 상태로 알아본다.
-- 실제 동작 (scm-api 로 확인): 없는 경로 → `404 NOT_FOUND`, 깨진 JSON → `400 BAD_REQUEST`, 100KB 넘는 본문 → `413 PAYLOAD_TOO_LARGE`,
+- 실제 동작 (scm-api 로 확인): 없는 경로 → `404 NOT_FOUND`, 깨진 JSON → `400 BAD_REQUEST`, 1MB 넘는 본문 → `413 PAYLOAD_TOO_LARGE` (scm-api 는 제품 등록 명령이 시리얼을 5000개까지 받아 JSON 본문 한도를 기본 100KB 에서 1MB 로 올렸다),
   있는 경로에 없는 메서드 → Express 는 405 가 아니라 `404 NOT_FOUND` ("Cannot DELETE /products"), zod 실패 → `400 VALIDATION_FAILED` + `details`,
   DB 연결 실패 → `500 { "code": "INTERNAL_ERROR" }`.
 
@@ -131,17 +144,19 @@ export class SomeService {
 }
 ```
 
-| 네임스페이스      | 환경변수                                             | 값                                                                       |
-| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
-| `httpConfig`      | `PORT`                                               | `{ port }`                                                               |
-| `databaseConfig`  | `DATABASE_URL` (mysql://)                            | `{ url }`                                                                |
-| `messagingConfig` | `REDIS_URL` (redis(s)://, 선택)                      | `{ redisUrl }` — 없으면 프로세스 내부 버스 (다른 서비스로 전달되지 않음) |
-| `logConfig`       | `LOG_LEVEL` (기본 `log`), `LOG_FORMAT` (기본 `text`) | `{ level, format }`                                                      |
+| 네임스페이스             | 환경변수                                             | 값                                                                       |
+| ------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| `httpConfig`             | `PORT`                                               | `{ port }`                                                               |
+| `databaseConfig`         | `DATABASE_URL` (mysql://)                            | `{ url }`                                                                |
+| `messagingConfig`        | `REDIS_URL` (redis(s)://, 선택)                      | `{ redisUrl }` — 없으면 프로세스 내부 버스 (다른 서비스로 전달되지 않음) |
+| `logConfig`              | `LOG_LEVEL` (기본 `log`), `LOG_FORMAT` (기본 `text`) | `{ level, format }`                                                      |
+| `deviceConfig` (scm-api) | `DEVICE_API_URL` (기본 `http://localhost:3004`)      | `{ apiUrl }` — 기기 서버 주소                                            |
 
 - 세 서비스의 모양이 같아 네임스페이스는 `@repo/nest-kit/config` 에 한 번만 있다. 서비스마다 다른 기본값(포트, DB 이름)은 `AppModule` 에서
   `serviceConfigModule({ defaults: { PORT: 3001, DATABASE_URL: '...' } })` 로 넘긴다.
 - **우선순위**: 프로세스 환경변수 > 실행 디렉터리(`apps/<service>`)의 `.env` > `defaults` > 스키마의 기본값. 빈 값(`PORT=`)은 기본값으로 넘어가지 않고 오류다 (`REDIS_URL=` 만 "없음"으로 본다).
 - 기동 때 모든 네임스페이스를 한 번에 검증하고, 잘못된 변수를 전부 나열한 `ConfigError` 로 멈춘다.
+- DB 가 없는 서비스(`device-api`)는 `defaults` 에 `DATABASE_URL` 을 주지 않는다. 그러면 `database`·`messaging` 네임스페이스를 등록하지 않고 `http`·`log` 만 읽는다.
 - 서비스 고유 네임스페이스는 같은 함수로 만들고 `load` 로 넣는다. 스키마에 기본값을 두면 `.env` 없이도 뜬다.
 
   ```ts

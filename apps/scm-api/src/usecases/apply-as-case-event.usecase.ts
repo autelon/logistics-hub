@@ -4,6 +4,7 @@ import type { AsCaseMessage } from '@repo/contracts/as';
 import { TransactionRunner } from '@repo/nest-kit/transaction-runner';
 
 import { CatalogService } from '../domains/catalog/application/catalog.service.js';
+import { DeviceRequestService } from '../domains/device-request/application/device-request.service.js';
 import { UnitService } from '../domains/unit/application/unit.service.js';
 
 /**
@@ -24,6 +25,7 @@ export class ApplyAsCaseEventUsecase {
     @Inject(TransactionRunner) private readonly tx: TransactionRunner,
     private readonly catalog: CatalogService,
     private readonly units: UnitService,
+    private readonly deviceRequests: DeviceRequestService,
   ) {}
 
   execute(message: AsCaseMessage): Promise<ApplyAsCaseEventResult> {
@@ -35,8 +37,9 @@ export class ApplyAsCaseEventUsecase {
       if (!unit) return 'unknown-serial';
       const product = await this.catalog.productOf(unit.productId);
 
-      await this.units.record(unit, product, {
-        type: type === 'as.doa.confirmed' ? 'DOA_CONFIRMED' : 'SCRAPPED',
+      const factType = type === 'as.doa.confirmed' ? 'DOA_CONFIRMED' : 'SCRAPPED';
+      const { deviceRequest } = await this.units.record(unit, product, {
+        type: factType,
         occurredAt: new Date(
           type === 'as.doa.confirmed' ? payload.confirmedAt : payload.scrappedAt,
         ),
@@ -47,6 +50,14 @@ export class ApplyAsCaseEventUsecase {
         idempotencyKey: `message:${id}`,
         note: type === 'as.doa.confirmed' ? `${payload.origin} / ${payload.disposition}` : null,
       });
+      if (deviceRequest) {
+        await this.deviceRequests.create({
+          type: deviceRequest,
+          reason: factType,
+          createdBy: 'as-api',
+          items: [{ unitId: unit.id, serialNumber: unit.serialNumber, sku: product.sku }],
+        });
+      }
       return 'recorded';
     });
   }

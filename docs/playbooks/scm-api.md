@@ -2,32 +2,33 @@
 
 준비와 변수(`SCM`, `RUN`, `post`, `get`)는 [README.md](README.md). AS 이벤트 수신(28–33)에는 as-api 와 Redis 도 떠 있어야 한다.
 규격: `packages/contracts/src/scm.ts`. 에러 코드와 상태: `apps/scm-api/src/errors.ts`.
+제품 등록(`REGISTERED`), 기기 요청, 미등록 출고 이상은 [registration.md](registration.md) 에서 다룬다. 이 플레이북의 제품은 등록이 필요 없는 `NONE` 으로 등록해, 출고·배송에 "미등록 개체" 이상이 붙지 않게 한다 (`SERIAL` 제품이 등록 없이 출고되면 붙는다).
 
 ## 기준 정보
 
 ### 1. 제품 등록
 
 ```sh
-post $SCM/products '{"sku":"CAM-01","name":"카메라"}'
+post $SCM/products '{"sku":"CAM-01","name":"카메라","trackingMode":"NONE"}'
 ```
 
-기대: `{"sku":"CAM-01","name":"카메라"}` → 201
+기대: `{"sku":"CAM-01","name":"카메라","trackingMode":"NONE"}` → 201
 
 ### 2. 같은 SKU 로 다시 등록하면 내용이 갱신된다
 
 ```sh
-post $SCM/products '{"sku":"CAM-01","name":"카메라 (2세대)"}'
+post $SCM/products '{"sku":"CAM-01","name":"카메라 (2세대)","trackingMode":"NONE"}'
 ```
 
-기대: `{"sku":"CAM-01","name":"카메라 (2세대)"}` → 201 (409 가 아니다)
+기대: `{"sku":"CAM-01","name":"카메라 (2세대)","trackingMode":"NONE"}` → 201 (409 가 아니다)
 
 ### 3. 두 번째 제품
 
 ```sh
-post $SCM/products '{"sku":"BAT-01","name":"배터리"}'
+post $SCM/products '{"sku":"BAT-01","name":"배터리","trackingMode":"NONE"}'
 ```
 
-기대: `{"sku":"BAT-01","name":"배터리"}` → 201
+기대: `{"sku":"BAT-01","name":"배터리","trackingMode":"NONE"}` → 201
 
 ### 4. 제품 목록 — sku 순, 갱신된 이름
 
@@ -35,16 +36,16 @@ post $SCM/products '{"sku":"BAT-01","name":"배터리"}'
 get $SCM/products
 ```
 
-기대: `[{"sku":"BAT-01","name":"배터리"},{"sku":"CAM-01","name":"카메라 (2세대)"}]` → 200
+기대: `[{"sku":"BAT-01","name":"배터리","trackingMode":"NONE"},{"sku":"CAM-01","name":"카메라 (2세대)","trackingMode":"NONE"}]` → 200
 (이전 실행이 남긴 다른 SKU 가 더 있을 수 있다. 위 둘이 이 순서로 포함되면 된다.)
 
 ### 5. 이름 되돌리기
 
 ```sh
-post $SCM/products '{"sku":"CAM-01","name":"카메라"}'
+post $SCM/products '{"sku":"CAM-01","name":"카메라","trackingMode":"NONE"}'
 ```
 
-기대: `{"sku":"CAM-01","name":"카메라"}` → 201
+기대: `{"sku":"CAM-01","name":"카메라","trackingMode":"NONE"}` → 201
 
 ### 6. 거점 등록 (3곳)
 
@@ -125,6 +126,7 @@ get $SCM/units/CAM-A-$RUN
   "status": "PRODUCED",
   "locationCode": "FAC-SZ",
   "orderRef": null,
+  "registeredAt": null,
   "anomalies": [],
   "events": [
     {
@@ -169,8 +171,8 @@ get $SCM/units/CAM-A-$RUN
 get $SCM/stock
 ```
 
-기대 → 200: 배열에 `{"sku":"CAM-01","locationCode":null,"status":"DELIVERED","quantity":N}` 이 있다 (N 은 이 DB 에 배송 완료된 CAM-01 수. 깨끗한 DB 면 1).
-행은 sku, 거점, 상태별로 하나씩이고, 이전 실행의 제품도 집계된다.
+기대 → 200: 배열에 `{"sku":"CAM-01","locationCode":null,"status":"DELIVERED","registered":false,"quantity":N}` 이 있다 (N 은 이 DB 에 배송 완료된 CAM-01 수. 깨끗한 DB 면 1).
+행은 sku, 거점, 상태, 등록 여부별로 하나씩이고, 이전 실행의 제품도 집계된다.
 
 ## 에러 코드
 
@@ -212,7 +214,7 @@ post $SCM/unit-events "{\"serialNumber\":\"CAM-A-$RUN\",\"sku\":\"BAT-01\",\"typ
 post $SCM/unit-events "{\"serialNumber\":\"CAM-A-$RUN\",\"type\":\"LOST\",\"occurredAt\":\"2026-09-06T00:00:00Z\",\"source\":{\"system\":\"x\"}}"
 ```
 
-기대 → 400: `{"code":"VALIDATION_FAILED","details":[{"path":"type","message":"Invalid option: expected one of \"MANUFACTURED\"|\"DISPATCHED\"|\"RECEIVED\"|\"STORED\"|\"SHIPPED\"|\"DELIVERED\"|\"RETURN_RECEIVED\"|\"DOA_CONFIRMED\"|\"SCRAPPED\""}]}`
+기대 → 400: `{"code":"VALIDATION_FAILED","details":[{"path":"type","message":"Invalid option: expected one of \"MANUFACTURED\"|\"DISPATCHED\"|\"RECEIVED\"|\"STORED\"|\"SHIPPED\"|\"DELIVERED\"|\"RETURN_RECEIVED\"|\"DOA_CONFIRMED\"|\"SCRAPPED\"|\"REGISTERED\""}]}`
 
 ### 20. UNIT_NOT_FOUND
 
@@ -302,7 +304,7 @@ get $SCM/stock
 조회 → 200: `status` `IN_STOCK`, `locationCode` `SVC-SEL`. `events` 끝의 두 개는
 무효화된 RECEIVED @WH-ICN (`correction.reason` `입고 거점 오기재`, `correction.replacementEventId` = 대체 사실의 id) 와
 대체 RECEIVED @SVC-SEL (`source` `{"system":"logistics-hub:correction","ref":"operator-1"}`, `correction: null`).
-재고에는 `{"sku":"CAM-01","locationCode":"SVC-SEL","status":"IN_STOCK","quantity":1}` 이 있고 WH-ICN 쪽 IN_STOCK 은 이 제품만큼 줄어 있다.
+재고에는 `{"sku":"CAM-01","locationCode":"SVC-SEL","status":"IN_STOCK","registered":false,"quantity":1}` 이 있고 WH-ICN 쪽 IN_STOCK 은 이 제품만큼 줄어 있다.
 
 ## 멱등 키
 

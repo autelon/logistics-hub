@@ -10,6 +10,6 @@ export class ListProductsUsecase {
 
   async execute(): Promise<ProductView[]> {
     const products = await this.catalog.listProducts();
-    return products.map(({ sku, name }) => ({ sku, name }));
+    return products.map(({ sku, name, trackingMode }) => ({ sku, name, trackingMode }));
   }
 }

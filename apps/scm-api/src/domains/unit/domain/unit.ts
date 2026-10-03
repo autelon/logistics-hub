@@ -1,5 +1,5 @@
 import type { OrderRef } from '@repo/contracts/common';
-import type { UnitEventType, UnitStatus } from '@repo/contracts/scm';
+import type { TrackingMode, UnitEventType, UnitStatus } from '@repo/contracts/scm';
 
 /**
  * 물리 제품 한 개. status 이하는 사실(UnitEvent)들을 `projectUnit` 으로 접어 만든 "현재 상태" 캐시이며
@@ -13,6 +13,8 @@ export interface Unit {
   status: UnitStatus;
   locationId: string | null;
   orderRef: OrderRef | null;
+  /** 제품으로 등록된 시각. 유효한 `REGISTERED` 사실이 없으면 null. */
+  registeredAt: Date | null;
   anomalies: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -49,6 +51,8 @@ export interface UnitEventCorrection {
 export interface ProductRef {
   id: string;
   sku: string;
+  /** 시리얼 추적 제품만 등록이 필요하다 (`requiresRegistration`). */
+  trackingMode: TrackingMode;
 }
 export interface LocationRef {
   id: string;
@@ -81,10 +85,11 @@ export interface UnitLifecycle {
   }[];
 }
 
-/** SKU × 거점 × 상태별 수량. */
+/** SKU × 거점 × 상태 × 등록 여부별 수량. */
 export interface StockCount {
   sku: string;
   locationCode: string | null;
   status: UnitStatus;
+  registered: boolean;
   quantity: number;
 }

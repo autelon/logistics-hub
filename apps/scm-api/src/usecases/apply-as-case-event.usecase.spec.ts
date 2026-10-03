@@ -1,107 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AsCaseMessage } from '@repo/contracts/as';
-import type { EventOutbox } from '@repo/nest-kit/event-outbox';
-import type { TransactionRunner } from '@repo/nest-kit/transaction-runner';
 
-import { CatalogService } from '../domains/catalog/application/catalog.service.js';
-import type { Location, Product } from '../domains/catalog/domain/catalog.js';
-import type { CatalogRepository } from '../domains/catalog/domain/catalog.repository.js';
-import { UnitService } from '../domains/unit/application/unit.service.js';
-import type { UnitState } from '../domains/unit/domain/unit-projection.js';
-import type { Unit, UnitEvent, UnitEventCorrection } from '../domains/unit/domain/unit.js';
-import type { UnitRepository } from '../domains/unit/domain/unit.repository.js';
+import { seedUnit, setupMemory } from '../testing/memory-repositories.js';
 import { ApplyAsCaseEventUsecase } from './apply-as-case-event.usecase.js';
 
-// ---------- 메모리 구현 ----------
-
-const product: Product = { id: 'P1', sku: 'CAM-01', name: '카메라', createdAt: new Date() };
-
-const catalogRepository: CatalogRepository = {
-  upsertProduct: () => Promise.resolve(),
-  listProducts: () => Promise.resolve([product]),
-  findProductBySku: (sku) => Promise.resolve(sku === product.sku ? product : undefined),
-  findProductById: (id) => Promise.resolve(id === product.id ? product : undefined),
-  upsertLocation: () => Promise.resolve(),
-  listLocations: (): Promise<Location[]> => Promise.resolve([]),
-  findLocationByCode: () => Promise.resolve(undefined),
-  findLocationById: () => Promise.resolve(undefined),
-};
-
-class MemoryUnitRepository implements UnitRepository {
-  units: Unit[] = [];
-  events: UnitEvent[] = [];
-  corrections: UnitEventCorrection[] = [];
-  private seq = 0;
-
-  findBySerial(serialNumber: string) {
-    return Promise.resolve(this.units.find((u) => u.serialNumber === serialNumber));
-  }
-  findBySerialForUpdate(serialNumber: string) {
-    return this.findBySerial(serialNumber);
-  }
-  createUnit(unit: Omit<Unit, 'id'>) {
-    const saved = { ...unit, id: `U${++this.seq}` };
-    this.units.push(saved);
-    return Promise.resolve(saved);
-  }
-  updateState(unitId: string, state: UnitState, updatedAt: Date) {
-    const unit = this.units.find((u) => u.id === unitId);
-    if (unit) Object.assign(unit, state, { updatedAt });
-    return Promise.resolve();
-  }
-  addEvent(event: Omit<UnitEvent, 'id'>) {
-    const saved = { ...event, id: `E${++this.seq}` };
-    this.events.push(saved);
-    return Promise.resolve(saved);
-  }
-  findEventByIdempotencyKey(idempotencyKey: string) {
-    return Promise.resolve(this.events.find((e) => e.idempotencyKey === idempotencyKey));
-  }
-  findEventWithUnitForUpdate(eventId: string) {
-    const event = this.events.find((e) => e.id === eventId);
-    const unit = event && this.units.find((u) => u.id === event.unitId);
-    return Promise.resolve(event && unit ? { event, unit } : undefined);
-  }
-  listEffectiveEvents(unitId: string) {
-    return Promise.resolve(
-      this.events.filter(
-        (e) => e.unitId === unitId && !this.corrections.some((c) => c.targetEventId === e.id),
-      ),
-    );
-  }
-  addCorrection(correction: Omit<UnitEventCorrection, 'id'>) {
-    const saved = { ...correction, id: `C${++this.seq}` };
-    this.corrections.push(saved);
-    return Promise.resolve(saved);
-  }
-  findCorrectionByTarget(targetEventId: string) {
-    return Promise.resolve(this.corrections.find((c) => c.targetEventId === targetEventId));
-  }
-  findLifecycle() {
-    return Promise.resolve(undefined);
-  }
-  countStock() {
-    return Promise.resolve([]);
-  }
-}
-
 const setup = () => {
-  const units = new MemoryUnitRepository();
-  const outbox: { topic: string; key: string; event: unknown }[] = [];
-  const outboxPort: EventOutbox = {
-    enqueue: (topic, key, event) => {
-      outbox.push({ topic, key, event });
-      return Promise.resolve();
-    },
-  };
-  const tx: TransactionRunner = { run: (work) => work() };
+  const memory = setupMemory();
   const usecase = new ApplyAsCaseEventUsecase(
-    tx,
-    new CatalogService(catalogRepository),
-    new UnitService(units, outboxPort),
+    memory.tx,
+    memory.catalog,
+    memory.units,
+    memory.deviceRequests,
   );
-  return { units, outbox, usecase };
+  return { ...memory, usecase };
 };
 
 const doaConfirmed: AsCaseMessage = {
@@ -119,17 +31,10 @@ const doaConfirmed: AsCaseMessage = {
 
 describe('ApplyAsCaseEventUsecase', () => {
   it('아는 시리얼이면 사실로 기록하고 알리며 상태를 다시 계산한다', async () => {
-    const { units, outbox, usecase } = setup();
-    const now = new Date('2026-02-01T00:00:00.000Z');
-    await units.createUnit({
-      serialNumber: 'SN-1',
-      productId: product.id,
+    const { unitRepository: units, outbox, usecase } = setup();
+    await seedUnit(units, 'SN-1', {
       status: 'DELIVERED',
-      locationId: null,
       orderRef: { orderId: 'O-1', fulfillmentItemId: null },
-      anomalies: [],
-      createdAt: now,
-      updatedAt: now,
     });
 
     expect(await usecase.execute(doaConfirmed)).toBe('recorded');
@@ -160,18 +65,59 @@ describe('ApplyAsCaseEventUsecase', () => {
     expect(units.units[0]?.status).toBe('DOA');
   });
 
-  it('같은 메시지가 다시 오면 아무것도 하지 않는다', async () => {
-    const { units, outbox, usecase } = setup();
-    const now = new Date();
-    await units.createUnit({
-      serialNumber: 'SN-1',
-      productId: product.id,
-      status: 'DELIVERED',
+  it('등록된 제품이 DOA 로 확정되면 DEACTIVATE 기기 요청을 하나 만든다', async () => {
+    const { unitRepository: units, deviceRequestRepository: requests, outbox, usecase } = setup();
+    const registeredAt = new Date('2026-02-01T00:00:00.000Z');
+    const unit = await seedUnit(units, 'SN-1', { status: 'DELIVERED', registeredAt });
+    await units.addEvent({
+      unitId: unit.id,
+      type: 'REGISTERED',
+      occurredAt: registeredAt,
+      recordedAt: registeredAt,
       locationId: null,
       orderRef: null,
-      anomalies: [],
-      createdAt: now,
-      updatedAt: now,
+      caseId: null,
+      source: { system: 'logistics-hub', ref: 'op-1' },
+      idempotencyKey: null,
+      note: null,
+    });
+
+    await usecase.execute(doaConfirmed);
+
+    expect(units.units[0]).toMatchObject({ status: 'DOA', registeredAt });
+    expect(requests.requests).toHaveLength(1);
+    expect(requests.requests[0]).toMatchObject({
+      type: 'DEACTIVATE',
+      reason: 'DOA_CONFIRMED',
+      createdBy: 'as-api',
+    });
+    expect(requests.items).toMatchObject([
+      { requestId: requests.requests[0]?.id, serialNumber: 'SN-1', sku: 'CAM-01' },
+    ]);
+    expect(outbox.map((e) => e.topic)).toEqual(['scm.unit-events', 'scm.device-requests']);
+    expect(outbox[1]).toMatchObject({
+      key: requests.requests[0]?.id,
+      event: {
+        type: 'scm.device-request.created',
+        payload: { requestId: requests.requests[0]?.id, type: 'DEACTIVATE', count: 1 },
+      },
+    });
+  });
+
+  it('등록되지 않은 제품은 DOA 가 되어도 기기 요청을 만들지 않는다', async () => {
+    const { unitRepository: units, deviceRequestRepository: requests, usecase } = setup();
+    await seedUnit(units, 'SN-1', { status: 'DELIVERED' });
+
+    await usecase.execute(doaConfirmed);
+
+    expect(requests.requests).toHaveLength(0);
+  });
+
+  it('같은 메시지가 다시 오면 아무것도 하지 않는다', async () => {
+    const { unitRepository: units, outbox, usecase } = setup();
+    await seedUnit(units, 'SN-1', {
+      status: 'DELIVERED',
+      orderRef: { orderId: 'O-1', fulfillmentItemId: null },
     });
 
     await usecase.execute(doaConfirmed);
@@ -182,7 +128,7 @@ describe('ApplyAsCaseEventUsecase', () => {
   });
 
   it('모르는 시리얼이면 기록하지 않는다', async () => {
-    const { units, outbox, usecase } = setup();
+    const { unitRepository: units, outbox, usecase } = setup();
 
     expect(await usecase.execute(doaConfirmed)).toBe('unknown-serial');
 

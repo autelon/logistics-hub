@@ -5,6 +5,7 @@ import { InfraModule } from '@repo/nest-kit/infra.module';
 import { LoggerModule } from '@repo/nest-kit/logger.module';
 
 import * as schema from './db/schema.js';
+import { deviceConfig } from './device.config.js';
 import { ApiModule } from './presentation/api/api.module.js';
 import { ConsumerModule } from './presentation/consumer/consumer.module.js';
 
@@ -12,6 +13,7 @@ import { ConsumerModule } from './presentation/consumer/consumer.module.js';
   imports: [
     serviceConfigModule({
       defaults: { PORT: 3001, DATABASE_URL: 'mysql://root:root@localhost:3306/lh_scm' },
+      load: [deviceConfig],
     }),
     LoggerModule,
     InfraModule.forRoot({ schema }),
