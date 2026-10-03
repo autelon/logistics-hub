@@ -546,3 +546,33 @@ wait; echo
 
 기대: `200 200 200 200 200 200` (순서는 다를 수 있다). 프로필 행이 아직 없는 거점의 행을 `FOR UPDATE` 로 읽으면 같은 인덱스 갭에 락이 겹쳐 일부가 교착으로 `500` 이 된다.
 이를 피하려고 변경 트랜잭션은 첫 쿼리로 거점 행만 잠그고, 프로필은 일반 읽기로 읽는다.
+
+## 동시 중복 (`CONC-*-$RUN`)
+
+### 43. 같은 idempotencyKey 의 보고가 동시에 와도 하나만 기록되고 나머지는 중복이다
+
+5개를 동시에 보낸다. 시리얼이 이미 있는 경우(A)와 처음 보는 경우(B) 둘 다 본다.
+
+```sh
+ev() { echo "{\"serialNumber\":\"$1\",\"sku\":\"CAM-01\",\"type\":\"STORED\",\"occurredAt\":\"2026-10-01T00:00:00Z\",\"locationCode\":\"WH-ICN\",\"source\":{\"system\":\"wms-a\"},\"idempotencyKey\":\"$2\"}"; }
+conc() { seq 5 | xargs -P5 -I{} sh -c 'echo "$(curl -s -w " → %{http_code}" -X POST "$0" -H "content-type: application/json" -d "$1")"' "$1" "$2" | sort; }
+post $SCM/unit-events "$(ev CONC-A-$RUN seed-$RUN)" > /dev/null    # A 의 시리얼을 먼저 만든다
+echo "# A. 이미 있는 시리얼"; conc $SCM/unit-events "$(ev CONC-A-$RUN conc-a-$RUN)"
+echo "# B. 처음 보는 시리얼"; conc $SCM/unit-events "$(ev CONC-B-$RUN conc-b-$RUN)"
+docker-compose exec -T mysql mysql -uroot -proot lh_scm -N -e "SELECT idempotency_key, COUNT(*) FROM unit_events WHERE idempotency_key IN ('conc-a-$RUN','conc-b-$RUN') GROUP BY idempotency_key; SELECT COUNT(*) FROM units WHERE serial_number='CONC-B-$RUN'"
+```
+
+(서브에이전트는 `lh_scm` 대신 자기 DB. `CAM-01` 과 `WH-ICN` 은 1·6 에서 만든 것.) 기대: A, B 모두 5개가 `→ 201` 이고 `500` 은 없다.
+`duplicate` 는 `false` 하나와 `true` 넷이며 `eventId` 는 다섯 모두 같다 (`sort` 때문에 줄 순서가 다를 수 있다).
+
+```text
+{"eventId":"<E>","duplicate":false} → 201
+{"eventId":"<같은 E>","duplicate":true} → 201   (× 4)
+```
+
+DB: `conc-a-<RUN>` 1행, `conc-b-<RUN>` 1행, 그리고 `CONC-B-<RUN>` 시리얼 1행 (`1`).
+
+- A 에서 진 쪽은 사실 INSERT 가 `unit_events` 의 idempotency_key 고유 키 위반(MySQL 1062)으로 실패한다.
+- B 에서 진 쪽은 없는 시리얼의 틈을 `FOR UPDATE` 로 함께 잡았다가 시리얼 INSERT 에서 교착(MySQL 1213)으로 희생된다.
+- 어느 쪽이든 usecase 가 롤백된 뒤 요청을 처음부터 다시 하고, 다시 할 때는 먼저 커밋된 사실이 보여 중복으로 돌려준다.
+- 고치기 전에는 A, B 모두 하나만 `201`, 나머지 넷은 `500 {"code":"INTERNAL_ERROR"}` 였다.

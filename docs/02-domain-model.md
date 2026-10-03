@@ -105,7 +105,7 @@
   업체 배치 하나를 묶어 받기 위한 입구다 ([06-inbound-design.md](06-inbound-design.md) "업체 연동 방식").
   - 모르는 SKU·거점은 `UNKNOWN_SKU`·`UNKNOWN_LOCATION`(422), 시리얼 제품은 `QUANTITY_TRACKING_ONLY`(422, 시리얼은 개체 사실로만 추적). 하나라도 걸리면 요청 전체를 기록하지 않고 에러 `details.index` 에 첫 번째로 걸린 항목 번호(0부터)를 담는다. 우리가 내리는 명령이 아니라 업체가 보고한 사실이지만, 어느 제품·거점인지 모르면 기록할 수 없어 거절한다.
   - 같은 `idempotencyKey` 는 저장된 이동이든 같은 요청의 앞 항목이든 새로 기록하지 않고 기존 `movementId` 를 `duplicate: true` 로 돌려준다.
-  - 한계: 같은 키를 **동시에** 보내는 요청은 하나만 성공하고 나머지는 unique 위반으로 500 이 된다 (`POST /unit-events` 와 같다). 다시 보내면 `duplicate` 로 돌아온다.
+  - 같은 키를 **동시에** 보내도 하나만 기록되고 나머지는 `duplicate: true` 로 같은 `movementId` 를 돌려준다 (`POST /unit-events` 도 같다). 진 쪽은 idempotency_key 의 unique 위반(MySQL 1062)으로 트랜잭션이 롤백되고, usecase 가 요청 전체를 처음부터 다시 해서(`retryOnConflict`, 최대 5번) 이긴 쪽이 커밋한 키를 중복으로 알아본다. 다른 unique 인덱스의 위반은 이 경로로 다시 하지 않고 그대로 에러가 된다.
 - **정정은 역분개다.** `POST /stock-movements/:id/reversal { reason, actor }` 가 출발지·도착지를 바꾼 `ADJUSTMENT` 이동을 추가한다 (제품·로트·수량·재고 상태는 같다, `reverses_movement_id` 가 원래 이동). 원래 이동은 바뀌지 않는다.
   정정 시각이 `occurred_at`, 출처는 `logistics-hub:correction`(`source_ref` = 처리자), `note` 에 사유와 처리자. 이미 되돌렸으면 `MOVEMENT_ALREADY_REVERSED`(409), 없는 이동은 `MOVEMENT_NOT_FOUND`(404).
   역분개도 이동이라 한 번 되돌릴 수 있다 (원래 효과가 돌아온다). 원래 이동 행을 잠근 뒤 정정 여부를 읽어 동시 정정을 줄 세운다.
