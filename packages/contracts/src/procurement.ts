@@ -73,6 +73,9 @@ export type CreatePurchaseOrderInput = z.input<typeof CreatePurchaseOrderRequest
 export const UpdatePurchaseOrderRequest = PurchaseOrderFields;
 export type UpdatePurchaseOrderRequest = z.infer<typeof UpdatePurchaseOrderRequest>;
 
+/** URL 의 줄 번호(`/purchase-orders/:poNumber/lines/:lineNo/close`). */
+export const PurchaseOrderLineNo = z.coerce.number().int().min(1);
+
 export const IssuePurchaseOrderRequest = z.object({ actor: z.string().min(1).max(100) });
 export type IssuePurchaseOrderRequest = z.infer<typeof IssuePurchaseOrderRequest>;
 

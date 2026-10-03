@@ -7,11 +7,11 @@ import type {
 /** 개정에서 한 줄에 대해 바꿀 항목. 없는 키는 그대로 두고, `null` 은 값을 비운다. */
 export interface LinePatch {
   lineNo: number;
-  orderedQty?: number;
-  requestedDeliveryDate?: string;
-  unitPrice?: number | null;
-  overTolerancePct?: number | null;
-  underTolerancePct?: number | null;
+  orderedQty?: number | undefined;
+  requestedDeliveryDate?: string | undefined;
+  unitPrice?: number | null | undefined;
+  overTolerancePct?: number | null | undefined;
+  underTolerancePct?: number | null | undefined;
 }
 
 export interface RevisionChanges {
