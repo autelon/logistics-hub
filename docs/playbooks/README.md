@@ -10,6 +10,7 @@
 | [as-api.md](as-api.md)               | 접수·판정·폐기, 접수 번호, 에러 코드, 아웃박스                                                                        |
 | [registration.md](registration.md)   | 제품 등록(제외 사유 포함), 기기 요청과 모의 기기 서버, 실패·재시도, 미등록 출고 이상, DOA·등록 무효화의 비활성화 요청 |
 | [procurement.md](procurement.md)     | 발주 작성·발행·개정·줄 닫기·취소, 개정 이력, 거절 코드, 번호 채번과 행 잠금                                           |
+| [transport.md](transport.md)         | 선적 제출(대량, 발주 연결, 차수 번호, 이상), 중복·동시 제출, 운영자 연결, 선적 단위 제품 등록, 대량                   |
 | [warehouse.md](warehouse.md)         | 시리얼 없는 제품의 수량 원장(대량 기록, 중복 키·동시 중복, 거절, 정정), 통합 재고, 음수·0 행                          |
 | [web-console.md](web-console.md)     | 웹 콘솔 화면(제품 추적과 정정 UI, 재고, 주문, 제품 등록, 발주)                                                        |
 | [cross-service.md](cross-service.md) | 제조부터 정정·DOA·폐기·교체 출고까지 세 서비스를 가로지르는 전체 흐름, 아웃박스·Redis 전달 확인                       |
