@@ -27,11 +27,16 @@ export interface ProjectionOptions {
   requiresRegistration: boolean;
 }
 
-/** 각 사실이 정상적으로 뒤따를 수 있는 상태와, 그 결과 상태. */
+/**
+ * 각 사실이 정상적으로 뒤따를 수 있는 상태와, 그 결과 상태.
+ *
+ * 개체의 이력은 처음 시리얼이 보고된 지점에서 시작한다 (docs/06-inbound-design.md "정책 변경 지점" 2).
+ * 제조사 출하 목록의 `DISPATCHED` 가 첫 사실일 수 있으므로 `UNKNOWN` 에서도 정상이다.
+ */
 const RULES: Record<PhysicalUnitEventType, { after: readonly UnitStatus[]; becomes: UnitStatus }> =
   {
     MANUFACTURED: { after: ['UNKNOWN'], becomes: 'PRODUCED' },
-    DISPATCHED: { after: ['PRODUCED', 'IN_STOCK'], becomes: 'IN_TRANSIT' },
+    DISPATCHED: { after: ['UNKNOWN', 'PRODUCED', 'IN_STOCK'], becomes: 'IN_TRANSIT' },
     RECEIVED: { after: ['IN_TRANSIT'], becomes: 'IN_STOCK' },
     STORED: { after: ['IN_STOCK'], becomes: 'IN_STOCK' },
     SHIPPED: { after: ['IN_STOCK'], becomes: 'SHIPPED' },

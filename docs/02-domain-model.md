@@ -40,7 +40,7 @@
 | 사실              | 뜻             | 정상적으로 올 수 있는 상태         | 결과 상태             |
 | ----------------- | -------------- | ---------------------------------- | --------------------- |
 | `MANUFACTURED`    | 제조 완료      | (처음)                             | `PRODUCED`            |
-| `DISPATCHED`      | 거점에서 출발  | `PRODUCED`, `IN_STOCK`             | `IN_TRANSIT`          |
+| `DISPATCHED`      | 거점에서 출발  | (처음), `PRODUCED`, `IN_STOCK`     | `IN_TRANSIT`          |
 | `RECEIVED`        | 입고           | `IN_TRANSIT`                       | `IN_STOCK`            |
 | `STORED`          | 적재           | `IN_STOCK`                         | `IN_STOCK`            |
 | `SHIPPED`         | 주문 출고      | `IN_STOCK`                         | `SHIPPED`             |
@@ -48,6 +48,8 @@
 | `RETURN_RECEIVED` | 회수 입고      | `SHIPPED`, `DELIVERED`, `DOA`      | `RETURNED` (DOA 유지) |
 | `DOA_CONFIRMED`   | 초기 불량 확정 | `SHIPPED`, `DELIVERED`, `RETURNED` | `DOA`                 |
 | `SCRAPPED`        | 폐기           | `DOA`, `RETURNED`, `IN_STOCK`      | `SCRAPPED`            |
+
+개체의 이력은 처음 시리얼이 보고된 지점에서 시작하므로(06 "정책 변경 지점" 2) `DISPATCHED` 는 `UNKNOWN` 에서도 정상이다(제조사 출하 목록이 첫 사실일 수 있다). 입고 스캔(`RECEIVED`)·출고 스캔(`SHIPPED`)이 첫 사실이면 지금은 `UNKNOWN 상태에서 올 수 없는 사실` 이상이 붙는다(바꾸지 않았다). 샘플 검사의 시리얼 단위 검수 사실은 아직 사실 종류가 없다(6단계).
 
 `REGISTERED`(제품 등록)는 이 표에 없다. 물리 사실이 아니라 **등록 여부라는 다른 축**의 사실이라 상태·거점·이상을 바꾸지 않고 `registeredAt` 만 채운다 ([제품 등록](#제품-등록과-기기-요청)).
 
@@ -129,7 +131,7 @@
 | 줄 닫기          | `closed` 는 "더 안 들어온다"는 미달 납품 선언이다 (`closed_at/by/reason`). 닫을 수 있는 줄은 `OPEN` 뿐이다. 이미 닫은 줄은 `PO_LINE_ALREADY_CLOSED`(409)                                                                        |
 | 개정             | 줄의 수량·납기·단가·허용률 변경, 줄 추가, 줄 취소. 주문 수량을 받은 수량 아래로 줄이거나 받은 것이 있는 줄을 취소하면 `PO_QTY_BELOW_RECEIVED`. 바뀐 것이 없으면 이력을 남기지 않는다                                            |
 | 취소된 발주의 줄 | 줄을 따로 취소하지 않았어도 진행 상태는 `CANCELLED`(`openQty` 0)로 계산한다                                                                                                                                                     |
-| 발주 취소        | 받은 것이 없을 때만 (`PO_HAS_RECEIPTS`). 발행된 발주의 취소는 개정 이력에 남고, 초안의 취소는 남기지 않는다                                                                                                                     |
+| 발주 취소        | 받은 것이 없을 때만 (`PO_HAS_RECEIPTS`; 받은 수량 기준이라 선적만 있는 발주도 취소된다 — 06 확인 18). 발행된 발주의 취소는 개정 이력에 남고, 초안의 취소는 남기지 않는다                                                        |
 | 받은 수량        | 입고가 아직 없어 항상 0 이다 (`received-quantity.ts` 임시 구현, 6단계에서 교체). 서비스는 usecase 가 넘기는 조회 함수로 받으므로 도메인끼리 서로를 참조하지 않는다                                                              |
 | 선적 수량        | 응답의 `shippedQty` 는 줄에 연결된 선적 줄의 합이다 (`transport`). **완료 계산에는 쓰지 않는다** — 아직 도착하지 않았을 수 있는 수량이라 `receivedQty` 와 따로 보여 준다                                                        |
 
@@ -161,7 +163,7 @@
 | 조회        | `GET /shipments?poNumber=&unlinked=true`(최근 50건), `GET /shipments/:shipmentNo`(줄, 시리얼 수, 지금 유효한 이상, 연결된 발주, 연결 기록)                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 제품 등록   | `POST /unit-registrations` 는 `{ serialNumbers, actor }` 또는 `{ shipmentNo, actor }` 를 받는다(함께 보내면 `VALIDATION_FAILED`). 선적 번호는 그 선적의 시리얼 전부로 풀어 같은 제외 규칙을 적용한다                                                                                                                                                                                                                                                                                                                                                                         |
 
-- 설계 문서(06)는 "선적 헤더에는 발주 참조를 두지 않고 선적 줄이 발주 줄을 가리킨다"고 했지만, 제출이 발주 번호를 싣고 오고 차수가 발주 단위라서 5a 는 헤더에도 `purchase_order_id` 를 둔다. 줄의 `purchase_order_line_id` 가 다대다를 푸는 지점인 것은 그대로다.
+- 선적(차수)은 **발주 하나에 속한다**(소유자 답변 2026-10-04: 같은 송장번호로 묶은 차수가 서로 다른 발주에 걸친 경우는 없고 B/L 과 발주 번호가 함께 온다). 그래서 헤더가 `purchase_order_id` 를 가지고 줄의 `purchase_order_line_id` 가 그 발주의 줄을 가리킨다. 여러 발주를 실은 B/L 이 오면 발주마다 선적을 따로 만들고 같은 `bl_number` 로 묶는다(물리 운송 묶음은 5b).
 - 업체가 보낸 원본 보관과 체크포인트를 가진 배치 어댑터는 6단계에서 만든다. 5a 의 입구는 어댑터와 수기 입력이 같이 쓴다.
 
 ### 재고
