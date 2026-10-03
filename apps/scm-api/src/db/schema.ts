@@ -1,10 +1,23 @@
-import { boolean, index, json, mysqlTable, unique, varchar } from 'drizzle-orm/mysql-core';
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  check,
+  index,
+  int,
+  json,
+  mysqlTable,
+  unique,
+  varchar,
+  type AnyMySqlColumn,
+} from 'drizzle-orm/mysql-core';
 
 import type {
   DeviceRequestItemResult,
   DeviceRequestType,
   LocationPolicy,
   LocationType,
+  StockMovementReason,
+  StockStatus,
   TrackingMode,
   UnitEventType,
   UnitReceiptTrigger,
@@ -176,5 +189,43 @@ export const deviceRequestItems = mysqlTable(
     unique('device_request_items_request_unit_uq').on(t.requestId, t.unitId),
     index('device_request_items_page_idx').on(t.requestId, t.id),
     index('device_request_items_serial_idx').on(t.requestId, t.serialNumber),
+  ],
+);
+
+/**
+ * 시리얼 없는(LOT·NONE) 제품의 수량 이동. 추가만 하고 수정·삭제하지 않는다.
+ * 재고 = 거점·로트·재고 상태별로 (들어온 합) - (나간 합). 한쪽 거점이 비면 입고 또는 출고·폐기다.
+ * 정정은 반대 방향의 이동을 추가하는 역분개이고, 이동 하나는 한 번만 역분개할 수 있다.
+ */
+export const stockMovements = mysqlTable(
+  'stock_movements',
+  {
+    id: idColumn().primaryKey(),
+    productId: idColumn()
+      .notNull()
+      .references(() => products.id),
+    lotNo: varchar({ length: 100 }),
+    fromLocationId: idColumn().references(() => locations.id),
+    toLocationId: idColumn().references(() => locations.id),
+    quantity: int().notNull(),
+    stockStatus: varchar({ length: 16 }).$type<StockStatus>().notNull(),
+    reason: varchar({ length: 32 }).$type<StockMovementReason>().notNull(),
+    occurredAt: utcDateTime().notNull(),
+    recordedAt: utcDateTime().notNull(),
+    sourceSystem: varchar({ length: 100 }).notNull(),
+    sourceRef: varchar({ length: 200 }),
+    idempotencyKey: varchar({ length: 200 }).unique(),
+    /** 역분개의 사유와 처리자가 들어가므로 보고 때의 메모보다 길다. */
+    note: varchar({ length: 1000 }),
+    reversesMovementId: idColumn()
+      .unique()
+      .references((): AnyMySqlColumn => stockMovements.id),
+  },
+  (t) => [
+    check('stock_movements_quantity_chk', sql`${t.quantity} > 0`),
+    check(
+      'stock_movements_location_chk',
+      sql`${t.fromLocationId} is not null or ${t.toLocationId} is not null`,
+    ),
   ],
 );

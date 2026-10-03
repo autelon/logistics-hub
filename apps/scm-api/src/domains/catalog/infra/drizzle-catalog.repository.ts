@@ -30,6 +30,15 @@ export class DrizzleCatalogRepository implements CatalogRepository {
     return row;
   }
 
+  async findProductsBySkus(skus: readonly string[]): Promise<Product[]> {
+    if (skus.length === 0) return [];
+    return this.db
+      .get()
+      .select()
+      .from(products)
+      .where(inArray(products.sku, [...skus]));
+  }
+
   async findProductById(id: string): Promise<Product | undefined> {
     const [row] = await this.db.get().select().from(products).where(eq(products.id, id)).limit(1);
     return row;
@@ -77,6 +86,15 @@ export class DrizzleCatalogRepository implements CatalogRepository {
       .limit(1)
       .for('update');
     return row;
+  }
+
+  async findLocationsByCodes(codes: readonly string[]): Promise<Location[]> {
+    if (codes.length === 0) return [];
+    return this.db
+      .get()
+      .select()
+      .from(locations)
+      .where(inArray(locations.code, [...codes]));
   }
 
   async findLocationById(id: string): Promise<Location | undefined> {

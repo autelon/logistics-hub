@@ -19,6 +19,12 @@ import { UnitService } from '../domains/unit/application/unit.service.js';
 import { projectUnit, type UnitState } from '../domains/unit/domain/unit-projection.js';
 import type { Unit, UnitEvent, UnitEventCorrection } from '../domains/unit/domain/unit.js';
 import type { UnitRepository } from '../domains/unit/domain/unit.repository.js';
+import {
+  ledgerEntries,
+  type NewStockMovement,
+  type StockMovement,
+} from '../domains/warehouse/domain/stock-movement.js';
+import type { StockMovementRepository } from '../domains/warehouse/domain/stock-movement.repository.js';
 
 // 단위 테스트용 메모리 구현. DB 없이 application 서비스와 usecase 를 돌린다 (docs/testing.md).
 // 빌드에는 들어가지 않는다 (tsconfig.build.json).
@@ -34,6 +40,9 @@ export class MemoryCatalogRepository implements CatalogRepository {
   }
   findProductBySku(sku: string) {
     return Promise.resolve(this.products.find((p) => p.sku === sku));
+  }
+  findProductsBySkus(skus: readonly string[]) {
+    return Promise.resolve(this.products.filter((p) => skus.includes(p.sku)));
   }
   findProductById(id: string) {
     return Promise.resolve(this.products.find((p) => p.id === id));
@@ -52,6 +61,9 @@ export class MemoryCatalogRepository implements CatalogRepository {
   }
   findLocationByCodeForUpdate() {
     return Promise.resolve(undefined);
+  }
+  findLocationsByCodes(): Promise<Location[]> {
+    return Promise.resolve([]);
   }
   findLocationById() {
     return Promise.resolve(undefined);
@@ -123,6 +135,46 @@ export class MemoryUnitRepository implements UnitRepository {
   }
   countStock() {
     return Promise.resolve([]);
+  }
+}
+
+export class MemoryStockMovementRepository implements StockMovementRepository {
+  movements: StockMovement[] = [];
+  private seq = 0;
+
+  insertAll(movements: readonly NewStockMovement[]) {
+    const saved = movements.map((movement) => ({ ...movement, id: `M${++this.seq}` }));
+    this.movements.push(...saved);
+    return Promise.resolve(saved);
+  }
+  findIdsByIdempotencyKeys(keys: readonly string[]) {
+    const found = new Map<string, string>();
+    for (const movement of this.movements) {
+      if (movement.idempotencyKey && keys.includes(movement.idempotencyKey)) {
+        found.set(movement.idempotencyKey, movement.id);
+      }
+    }
+    return Promise.resolve(found);
+  }
+  findByIdForUpdate(id: string) {
+    return Promise.resolve(this.movements.find((m) => m.id === id));
+  }
+  findReversalOf(id: string) {
+    return Promise.resolve(this.movements.find((m) => m.reversesMovementId === id));
+  }
+  /** 코드를 조인한 합산은 SQL 로만 하므로 메모리 구현은 비워 둔다 (플레이북으로 확인). 거점별 순변화는 `netByLocation`. */
+  balances() {
+    return Promise.resolve([]);
+  }
+  /** 거점 id → 순변화 (`ledgerEntries` 로 푼 합). 0 인 거점도 포함한다. */
+  netByLocation(): Map<string, number> {
+    const net = new Map<string, number>();
+    for (const movement of this.movements) {
+      for (const { locationId, delta } of ledgerEntries(movement)) {
+        net.set(locationId, (net.get(locationId) ?? 0) + delta);
+      }
+    }
+    return net;
   }
 }
 

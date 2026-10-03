@@ -35,6 +35,15 @@ export class CatalogService {
     return product;
   }
 
+  /**
+   * SKU 여러 개를 한 번에 찾는다. sku → 제품. 없는 SKU 는 들어 있지 않으므로 호출하는 쪽이
+   * 어느 항목이 없는지 알려 줄 수 있다 (`resolveProduct` 는 던질 뿐 어느 항목인지 모른다).
+   */
+  async productsBySku(skus: readonly string[]): Promise<Map<string, Product>> {
+    const found = await this.catalog.findProductsBySkus([...new Set(skus)]);
+    return new Map(found.map((product) => [product.sku, product]));
+  }
+
   /** 다른 테이블이 외래 키로 가리키는 제품. 없으면 데이터 무결성이 깨진 것이라 서비스 에러가 아니다. */
   async productOf(productId: string): Promise<Product> {
     const product = await this.catalog.findProductById(productId);
@@ -66,6 +75,12 @@ export class CatalogService {
   async resolveLocation(code: string | null): Promise<Location | null> {
     if (!code) return null;
     return this.locationByCode(code);
+  }
+
+  /** 거점 코드 여러 개를 한 번에 찾는다. code → 거점. 없는 코드는 들어 있지 않다. */
+  async locationsByCode(codes: readonly string[]): Promise<Map<string, Location>> {
+    const found = await this.catalog.findLocationsByCodes([...new Set(codes)]);
+    return new Map(found.map((location) => [location.code, location]));
   }
 
   async locationCodeOf(locationId: string | null): Promise<string | null> {
