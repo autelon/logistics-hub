@@ -124,5 +124,6 @@
 | `state/`                                    | 스프린트 인계(`sprint.md`). 사용량 스냅샷 `quota.json` 은 커밋하지 않음                    | —                                                          |
 | `notion/`                                   | Notion 페이지·DB ID(`config.json`), 항목별 페이지 URL(`ids.json`). 커밋하지 않음, 로컬에만 | —                                                          |
 | `local/`                                    | 그 밖의 로컬 매핑. 커밋하지 않음                                                           | —                                                          |
+| `.claude/agent-memory/`                     | role 메모리(`memory: project`). 커밋하지 않음                                              | —                                                          |
 
 Notion URL·ID, 로컬 절대 경로, 계정 정보는 커밋·PR·handoff 에 쓰지 않는다. 커밋 전에 `git diff --cached | grep -n -E 'notion\.(com|so|site)|/Users/'` 가 비어 있어야 한다.
