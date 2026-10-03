@@ -117,6 +117,16 @@ export const ScmErrorCode = z.enum([
   'QUANTITY_TRACKING_ONLY', // 시리얼 추적 제품은 수량 이동으로 기록하지 않는다. details 에 항목 번호
   'MOVEMENT_NOT_FOUND',
   'MOVEMENT_ALREADY_REVERSED', // 수량 이동은 한 번만 역분개할 수 있다
+  'PO_NOT_FOUND',
+  'PO_NOT_DRAFT', // 초안(DRAFT)일 때만 되는 명령(수정, 발행)을 다른 상태에서 냄
+  'PO_NOT_ISSUED', // 발행(ISSUED)된 발주에만 되는 명령(개정, 줄 닫기)을 다른 상태에서 냄
+  'PO_ALREADY_CANCELLED',
+  'PO_HAS_RECEIPTS', // 받은 것이 있는 발주는 취소할 수 없음
+  'PO_LINE_NOT_FOUND',
+  'PO_LINE_ALREADY_CLOSED',
+  'PO_LINE_CANCELLED', // 취소한 줄은 바꾸거나 닫을 수 없음
+  'PO_LINE_ALREADY_COMPLETE', // 이미 다 받은(또는 과납인) 줄은 닫을 수 없음. 닫기는 미달 납품용
+  'PO_QTY_BELOW_RECEIVED', // 주문 수량(또는 줄 취소)이 이미 받은 수량 아래로 내려감. details 에 줄 번호와 받은 수량
 ]);
 export type ScmErrorCode = z.infer<typeof ScmErrorCode>;
 
