@@ -201,6 +201,6 @@ execute(message: { id: string; event: DoaConfirmed }) {
 아래 순서로 옮긴다. 옮긴 서비스는 목록에서 지우고, 전부 끝나면 이 절을 삭제한다.
 
 - [x] 공용 부품: `TransactionRunner`, `CurrentDb`, `EventOutbox`, `MessageInbox`, 레이어 의존 린트 규칙
-- [ ] `scm-api` (도메인: `catalog`, `unit`)
+- [x] `scm-api` (도메인: `catalog`, `unit`)
 - [ ] `oms-api` (도메인: `sellable`, `order`)
 - [x] `as-api` (도메인: `service-case`)
