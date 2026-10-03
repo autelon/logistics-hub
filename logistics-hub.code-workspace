@@ -17,6 +17,10 @@
       "path": "apps/as-api"
     },
     {
+      "name": "app · device-api",
+      "path": "apps/device-api"
+    },
+    {
       "name": "pkg · contracts",
       "path": "packages/contracts"
     },
