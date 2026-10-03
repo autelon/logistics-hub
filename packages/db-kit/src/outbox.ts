@@ -4,7 +4,7 @@ import { index, json, mysqlTable, varchar } from 'drizzle-orm/mysql-core';
 import type { MessageBus } from '@repo/messaging/message-bus';
 
 import { idColumn, newId, utcDateTime } from './columns.js';
-import type { AnyDb } from './db.js';
+import type { AnyDb, QueryExecutor } from './db.js';
 
 /**
  * 트랜잭셔널 아웃박스. 업무 데이터와 같은 트랜잭션에 이벤트를 적어 두고,
@@ -24,7 +24,7 @@ export const outboxEvents = mysqlTable(
 );
 
 /** application 서비스에서는 tx 를 넘기지 않는 `EventOutbox.enqueue` (`@repo/nest-kit/event-outbox`) 를 쓴다. */
-export const enqueue = async (tx: AnyDb, topic: string, key: string, payload: unknown) => {
+export const enqueue = async (tx: QueryExecutor, topic: string, key: string, payload: unknown) => {
   await tx.insert(outboxEvents).values({ id: newId(), topic, key, payload, createdAt: new Date() });
 };
 
