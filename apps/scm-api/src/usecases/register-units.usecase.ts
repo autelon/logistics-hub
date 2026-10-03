@@ -5,6 +5,7 @@ import { TransactionRunner } from '@repo/nest-kit/transaction-runner';
 
 import { CatalogService } from '../domains/catalog/application/catalog.service.js';
 import { DeviceRequestService } from '../domains/device-request/application/device-request.service.js';
+import { ShipmentService } from '../domains/transport/application/shipment.service.js';
 import { UnitService, type RegistrationTarget } from '../domains/unit/application/unit.service.js';
 import { decideRegistration } from '../domains/unit/domain/unit-registration.js';
 
@@ -16,6 +17,8 @@ import { decideRegistration } from '../domains/unit/domain/unit-registration.js'
  * → 등록된 것이 하나라도 있으면 기기 요청(REGISTER) 하나를 만든다. 요청은 배치당 하나다.
  * 개체마다 활성 여부 전후를 비교해 요청을 만드는 일반 경로(record·correct)는 여기서 쓰지 않는다 (제품당 요청이 생기므로).
  *
+ * 시리얼 목록 대신 선적(`shipmentNo`)을 받으면 그 선적의 시리얼 전부에 같은 규칙을 적용한다. 선적 줄의 시리얼이 시리얼 추적
+ * 제품이 아니거나 개체가 없으면(`SERIALS_ON_UNTRACKED_PRODUCT`, 충돌) 제외 사유로 돌려준다. 모르는 선적은 `SHIPMENT_NOT_FOUND`.
  * 같은 시리얼이 목록에 여러 번 있으면 한 번만 본다.
  */
 @Injectable()
@@ -25,10 +28,14 @@ export class RegisterUnitsUsecase {
     private readonly catalog: CatalogService,
     private readonly units: UnitService,
     private readonly deviceRequests: DeviceRequestService,
+    private readonly shipments: ShipmentService,
   ) {}
 
-  execute(request: RegisterUnitsRequest): Promise<RegisterUnitsResult> {
-    const serialNumbers = [...new Set(request.serialNumbers)];
+  async execute(request: RegisterUnitsRequest): Promise<RegisterUnitsResult> {
+    const serialNumbers =
+      'shipmentNo' in request
+        ? await this.shipments.serialNumbersOf(request.shipmentNo)
+        : [...new Set(request.serialNumbers)];
     return this.tx.run(async () => {
       const locked = await this.units.lockBySerials(serialNumbers);
       const unitBySerial = new Map(locked.map((unit) => [unit.serialNumber, unit]));

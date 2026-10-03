@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { product, seedInStock, seedUnit, setupMemory } from '../testing/memory-repositories.js';
+import { setupMemoryShipments } from '../testing/memory-shipment-repository.js';
 import { RegisterUnitsUsecase } from './register-units.usecase.js';
 
 const setup = () => {
@@ -8,13 +9,15 @@ const setup = () => {
     product(),
     product({ id: 'P2', sku: 'BAT-01', trackingMode: 'NONE' }),
   ]);
+  const { repository: shipmentRepository, service: shipments } = setupMemoryShipments();
   const usecase = new RegisterUnitsUsecase(
     memory.tx,
     memory.catalog,
     memory.units,
     memory.deviceRequests,
+    shipments,
   );
-  return { ...memory, usecase };
+  return { ...memory, shipmentRepository, shipments, usecase };
 };
 
 describe('RegisterUnitsUsecase', () => {
@@ -137,5 +140,61 @@ describe('RegisterUnitsUsecase', () => {
     expect(result.registered).toEqual(['OK-1']);
     expect(result.excluded).toEqual([]);
     expect(units.events.filter((e) => e.type === 'REGISTERED')).toHaveLength(1);
+  });
+
+  it('선적 번호를 받으면 그 선적의 시리얼 전부에 같은 제외 규칙을 적용한다', async () => {
+    const { unitRepository: units, shipments, usecase } = setup();
+    await seedInStock(units, 'OK-1');
+    await seedUnit(units, 'IN-TRANSIT-1', { status: 'IN_TRANSIT' });
+    const [shipment] = await shipments.record([
+      {
+        purchaseOrder: null,
+        reportedPoNumber: 'PO-X',
+        blNumber: 'BL-1',
+        invoiceNumber: null,
+        shipper: 'ACME',
+        mode: 'SEA',
+        shipDate: null,
+        eta: null,
+        source: { system: 'acme-portal', ref: null },
+        idempotencyKey: null,
+        reportedAt: new Date('2026-10-04T00:00:00.000Z'),
+        recordedAt: new Date('2026-10-04T00:00:00.000Z'),
+        note: null,
+        anomalies: [],
+        lines: [
+          {
+            lineNo: 1,
+            purchaseOrderLineId: null,
+            productId: 'P1',
+            shippedQty: 3,
+            lotNo: null,
+            serialNumbers: ['OK-1', 'IN-TRANSIT-1', 'GHOST'],
+          },
+        ],
+      },
+    ]);
+
+    const result = await usecase.execute({
+      shipmentNo: shipment?.shipmentNo ?? '',
+      actor: 'op-1',
+    });
+
+    expect(result.registered).toEqual(['OK-1']);
+    // 선적의 시리얼은 순서가 정해져 있지 않다 (저장소는 시리얼 순으로 준다).
+    expect(result.excluded).toHaveLength(2);
+    expect(result.excluded).toEqual(
+      expect.arrayContaining([
+        { serialNumber: 'GHOST', reason: 'UNIT_NOT_FOUND' },
+        { serialNumber: 'IN-TRANSIT-1', reason: 'NOT_IN_STOCK' },
+      ]),
+    );
+  });
+
+  it('모르는 선적 번호는 SHIPMENT_NOT_FOUND 로 거절한다', async () => {
+    const { usecase } = setup();
+    await expect(usecase.execute({ shipmentNo: 'NOPE', actor: 'op-1' })).rejects.toMatchObject({
+      code: 'SHIPMENT_NOT_FOUND',
+    });
   });
 });

@@ -197,12 +197,23 @@ export type CorrectUnitEventRequest = z.infer<typeof CorrectUnitEventRequest>;
 /** 기본값이 채워지기 전, 호출하는 쪽이 보내는 형태. */
 export type CorrectUnitEventInput = z.input<typeof CorrectUnitEventRequest>;
 
-/** 제품 등록 명령. 시리얼 목록을 받아 등록할 수 있는 것만 등록하고 나머지는 사유와 함께 돌려준다. */
-export const RegisterUnitsRequest = z.object({
-  serialNumbers: z.array(z.string().min(1).max(100)).min(1).max(5000),
-  /** 명령을 내린 운영자. 등록 사실의 처리자(source.ref)가 된다. */
-  actor: z.string().min(1).max(100),
-});
+/**
+ * 제품 등록 명령. 등록할 수 있는 것만 등록하고 나머지는 사유와 함께 돌려준다.
+ * 시리얼 목록(`serialNumbers`)이나 선적(`shipmentNo`) 중 하나를 받는다. 선적 단위 등록은 그 선적의 시리얼 전부에
+ * 같은 제외 규칙을 적용한다 (docs/06-inbound-design.md "제품 등록"). 둘을 함께 보내면 모호하므로 거절한다.
+ */
+export const RegisterUnitsRequest = z.union([
+  z.strictObject({
+    serialNumbers: z.array(z.string().min(1).max(100)).min(1).max(5000),
+    /** 명령을 내린 운영자. 등록 사실의 처리자(source.ref)가 된다. */
+    actor: z.string().min(1).max(100),
+  }),
+  z.strictObject({
+    /** 현재 번호나 연결하기 전 번호(`UNLINKED-…`). */
+    shipmentNo: z.string().min(1).max(64),
+    actor: z.string().min(1).max(100),
+  }),
+]);
 export type RegisterUnitsRequest = z.infer<typeof RegisterUnitsRequest>;
 
 /** 수량 이동 한 건. 출발지와 도착지 중 적어도 하나는 있어야 한다 (한쪽이 비면 입고 또는 출고·폐기). */
