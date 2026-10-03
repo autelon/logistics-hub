@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { asc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 
 import { newId } from '@repo/db-kit/columns';
 import { CurrentDb } from '@repo/nest-kit/current-db';
@@ -83,7 +83,7 @@ export class DrizzleStockMovementRepository implements StockMovementRepository {
     const db = this.db.get();
     const columns = (
       locationId: typeof stockMovements.toLocationId | typeof stockMovements.fromLocationId,
-      delta: ReturnType<typeof sql<number>>,
+      delta: SQL.Aliased<number>,
     ) => ({
       productId: stockMovements.productId,
       locationId,
@@ -93,11 +93,18 @@ export class DrizzleStockMovementRepository implements StockMovementRepository {
     });
 
     const incoming = db
-      .select(columns(stockMovements.toLocationId, sql<number>`${stockMovements.quantity}`))
+      .select(
+        columns(stockMovements.toLocationId, sql<number>`${stockMovements.quantity}`.as('delta')),
+      )
       .from(stockMovements)
       .where(isNotNull(stockMovements.toLocationId));
     const outgoing = db
-      .select(columns(stockMovements.fromLocationId, sql<number>`-${stockMovements.quantity}`))
+      .select(
+        columns(
+          stockMovements.fromLocationId,
+          sql<number>`-${stockMovements.quantity}`.as('delta'),
+        ),
+      )
       .from(stockMovements)
       .where(isNotNull(stockMovements.fromLocationId));
     const entries = incoming.unionAll(outgoing).as('entries');

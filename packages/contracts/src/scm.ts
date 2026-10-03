@@ -325,12 +325,21 @@ export interface UnitLifecycleView {
   anomalies: string[];
   events: UnitEventView[];
 }
+/**
+ * 재고 한 줄. 시리얼 제품은 개체 상태별 개수(`registered` 있음, `lotNo`·`stockStatus` 는 null),
+ * 수량 제품은 수량 원장의 합(`status` 는 `IN_STOCK`, `registered` 는 null)이다.
+ */
 export interface StockRow {
   sku: string;
+  trackingMode: TrackingMode;
   locationCode: string | null;
   status: UnitStatus;
-  /** 제품으로 등록되었는지(`REGISTERED` 사실이 유효한지). */
-  registered: boolean;
+  /** 제품으로 등록되었는지(`REGISTERED` 사실이 유효한지). 수량 제품은 등록 대상이 아니라 null. */
+  registered: boolean | null;
+  lotNo: string | null;
+  /** 수량 원장의 재고 상태. 시리얼 제품은 null. */
+  stockStatus: StockStatus | null;
+  /** 수량 제품은 음수일 수 있다 (보고 오류를 드러내려고 그대로 돌려준다). */
   quantity: number;
 }
 export interface RecordStockMovementsResult {
