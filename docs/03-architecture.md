@@ -170,17 +170,20 @@ apps/*-api ──▶ nest-kit ──▶ db-kit ──▶ messaging
 
 ## 서비스 내부 구조
 
-기능별 폴더 하나에 컨트롤러·서비스·순수 도메인 함수를 둔다.
+도메인 단위 모듈(`domains/<도메인>/{domain,application,infra}`)과, 도메인에 속하지 않는 `usecases/`, `presentation/` 으로 나눈다.
 
 ```
 apps/scm-api/src/
-  db/schema.ts              테이블 정의 (Drizzle)
-  units/
-    unit-projection.ts      사실 → 상태. 순수 함수, DB 없이 테스트
-    units.service.ts        트랜잭션, 아웃박스
-    units.controller.ts     HTTP + zod 검증
-  integration/              다른 서비스 이벤트 구독
+  db/schema.ts                        테이블 정의 전체 (Drizzle)
+  domains/unit/
+    domain/unit-projection.ts         사실 → 상태. 순수 함수, DB 없이 테스트
+    domain/unit.repository.ts         repository 인터페이스 + 토큰
+    application/unit.service.ts       한 도메인 안의 읽고·규칙 적용하고·쓰고·이벤트 적는 흐름
+    infra/drizzle-unit.repository.ts  Drizzle 구현
+  usecases/record-unit-event.usecase.ts   요청 하나의 처리 전체. 트랜잭션 경계, 여러 도메인을 엮음
+  presentation/api/units.controller.ts    HTTP + zod 검증 → usecase
+  presentation/consumer/as-case-events.consumer.ts   이벤트 검증 → usecase
 ```
 
-판단 규칙(상태 전이, 패키지 분해, 출고 항목 매칭)은 순수 함수로 빼서 단위 테스트하고,
-서비스 클래스는 "읽고, 규칙 적용하고, 쓰고, 이벤트 적는" 흐름만 가진다.
+호출 방향은 presentation → usecases → application → domain ← infra 하나뿐이고 린트로 강제한다.
+규칙 전문은 [architecture-rules.md](architecture-rules.md).

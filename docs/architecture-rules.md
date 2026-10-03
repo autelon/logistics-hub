@@ -180,6 +180,9 @@ execute(message: { id: string; event: DoaConfirmed }) {
 
 - 도메인 폴더 이름은 단수 명사 (`unit`, `order`, `service-case`).
 - usecase 는 파일 하나에 클래스 하나, 공개 메서드는 `execute` 하나.
+- `usecases/` 에는 usecase 외에 **여러 usecase 가 함께 쓰는 보조 파일**만 둘 수 있다: 도메인 타입 → 응답 타입 변환(`<도메인>-view.ts`), 컨슈머 그룹 상수(`consumer-group.ts`). 그 밖의 로직은 두지 않는다.
+- `id` 와 `publicId` 는 **repository 가 저장할 때 발급**한다 (`@repo/db-kit` 은 `infra` 만 import 할 수 있다). 그래서 domain 은 저장 전 객체를 `New<이름>` 타입(id 없음)으로 두고, `repository.insert(draft)` 가 저장된 객체를 돌려준다.
+- `application` 은 이벤트를 만들 때 `@repo/contracts` 의 `makeEvent`, `Topics`, 이벤트 타입을 쓴다. 규격의 값 타입과 같은 취급이다.
 
 ## 테스트
 
@@ -194,13 +197,3 @@ execute(message: { id: string; event: DoaConfirmed }) {
 3. `application` 서비스에 한 도메인 안의 흐름.
 4. `usecases` 에 요청 하나의 처리 전체.
 5. `presentation` 에 controller 나 consumer. 요청·응답 규격은 `@repo/contracts`.
-
-## 이행 상태
-
-이 규칙은 2026-10-03 에 정했고, 기존 코드는 아직 기능별 폴더(`units/`, `orders/`, `cases/` 등)에 controller·service 가 함께 있다.
-아래 순서로 옮긴다. 옮긴 서비스는 목록에서 지우고, 전부 끝나면 이 절을 삭제한다.
-
-- [x] 공용 부품: `TransactionRunner`, `CurrentDb`, `EventOutbox`, `MessageInbox`, 레이어 의존 린트 규칙
-- [x] `scm-api` (도메인: `catalog`, `unit`)
-- [x] `oms-api` (도메인: `sellable`, `order`)
-- [x] `as-api` (도메인: `service-case`)
