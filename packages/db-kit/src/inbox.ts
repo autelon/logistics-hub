@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { mysqlTable, unique, varchar } from 'drizzle-orm/mysql-core';
 
 import { idColumn, newId, utcDateTime } from './columns.js';
-import type { AnyDb } from './db.js';
+import type { QueryExecutor } from './db.js';
 
 /** 이미 처리한 메시지 기록. at-least-once 전달을 멱등하게 만든다. */
 export const processedMessages = mysqlTable(
@@ -21,7 +21,7 @@ export const processedMessages = mysqlTable(
  * 처음 보는 메시지면 기록하고 true, 이미 처리했으면 false.
  * usecase 에서는 tx 를 넘기지 않는 `MessageInbox.claim` (`@repo/nest-kit/message-inbox`) 을 쓴다.
  */
-export const claimMessage = async (tx: AnyDb, consumerGroup: string, messageId: string) => {
+export const claimMessage = async (tx: QueryExecutor, consumerGroup: string, messageId: string) => {
   const seen = await tx
     .select({ messageId: processedMessages.messageId })
     .from(processedMessages)

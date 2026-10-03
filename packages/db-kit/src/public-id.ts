@@ -2,7 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { int, mysqlTable, varchar } from 'drizzle-orm/mysql-core';
 
 import { idColumn, newId } from './columns.js';
-import type { AnyDb } from './db.js';
+import type { QueryExecutor } from './db.js';
 
 /**
  * 외부에 보여 주는 식별자(`ORD-2026-000123`)의 일련번호 카운터. 접두사 + 연도(UTC) 단위로 한 행이다.
@@ -22,7 +22,11 @@ export const publicIdColumn = () => varchar({ length: 32 });
  * 카운터 행의 `FOR UPDATE` 잠금이 커밋까지 유지되어, 같은 범위의 동시 발급은 순서대로 처리되고 번호가 겹치지 않는다.
  * 자동 커밋 연결에서 부르면 잠금이 문장마다 풀려 같은 번호가 두 번 나올 수 있다.
  */
-export const nextPublicId = async (tx: AnyDb, prefix: string, at: Date): Promise<string> => {
+export const nextPublicId = async (
+  tx: QueryExecutor,
+  prefix: string,
+  at: Date,
+): Promise<string> => {
   const scope = `${prefix}-${at.getUTCFullYear()}`;
   // 그 범위의 첫 발급이면 행을 만든다. 이미 있으면 아무것도 바꾸지 않는다.
   await tx
