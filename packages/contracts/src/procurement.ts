@@ -142,8 +142,13 @@ export interface PurchaseOrderLineView {
   unitPrice: number | null;
   overTolerancePct: number | null;
   underTolerancePct: number | null;
-  /** 받은 누계. 입고·선적 기능이 생기기 전에는 항상 0 이다. */
+  /** 받은 누계. 입고(구현 순서 6단계)가 생기기 전에는 항상 0 이다. 줄의 완료 상태는 이 값으로 계산한다. */
   receivedQty: number;
+  /**
+   * 선적 누계: 이 줄에 연결된 선적 줄의 수량 합 (`transport`). 완료 상태 계산에는 쓰지 않는다 —
+   * 아직 도착하지 않았을 수 있는 수량이라 `receivedQty` 와 따로 보여 준다.
+   */
+  shippedQty: number;
   /** 아직 들어올 것으로 기대하는 수량. OPEN 이 아니면 0. */
   openQty: number;
   completion: LineCompletion;
