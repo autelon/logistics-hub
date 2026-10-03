@@ -31,6 +31,7 @@ import type { StockMovementRepository } from '../domains/warehouse/domain/stock-
 
 export class MemoryCatalogRepository implements CatalogRepository {
   products: Product[] = [];
+  locations: Location[] = [];
 
   upsertProduct() {
     return Promise.resolve();
@@ -62,8 +63,8 @@ export class MemoryCatalogRepository implements CatalogRepository {
   findLocationByCodeForUpdate() {
     return Promise.resolve(undefined);
   }
-  findLocationsByCodes(): Promise<Location[]> {
-    return Promise.resolve([]);
+  findLocationsByCodes(codes: readonly string[]): Promise<Location[]> {
+    return Promise.resolve(this.locations.filter((l) => codes.includes(l.code)));
   }
   findLocationById() {
     return Promise.resolve(undefined);

@@ -5,11 +5,13 @@ import { TransactionRunner } from '@repo/nest-kit/transaction-runner';
 
 import { CatalogService } from '../domains/catalog/application/catalog.service.js';
 import { WarehouseService } from '../domains/warehouse/application/warehouse.service.js';
+import { StockMovementConflict } from '../domains/warehouse/domain/stock-movement-conflict.js';
 import {
   isQuantityTracked,
   type NewStockMovement,
 } from '../domains/warehouse/domain/stock-movement.js';
 import { scmError } from '../errors.js';
+import { retryOnConflict } from './retry-on-conflict.js';
 
 /**
  * 수량 이동을 한 트랜잭션으로 기록한다. 업체 배치 하나의 이동을 묶어 받는 입구다 (docs/06-inbound-design.md).
@@ -18,6 +20,10 @@ import { scmError } from '../errors.js';
  * 처음 걸리는 항목에서 멈춘다. 거절하면 아무것도 기록하지 않고, 에러 `details` 에 항목 번호(`index`, 0부터)를 담는다.
  * 시리얼 제품은 개체 사실로만 추적하므로 거절한다 (`QUANTITY_TRACKING_ONLY`).
  * 같은 idempotencyKey 는 한 번만 기록한다 (`WarehouseService.record`).
+ *
+ * 같은 키의 요청이 동시에 오면 진 쪽은 저장에서 `StockMovementConflict` 로 실패하고 트랜잭션이 통째로 롤백된다.
+ * 그러면 요청을 처음부터 다시 한다. 이긴 쪽이 이미 커밋했으므로 다시 할 때는 그 키들이 저장된 것으로 보여
+ * 중복(`duplicate: true`)으로 돌아온다. 한 항목이라도 겹치면 요청 전체를 다시 하므로 겹치지 않은 항목은 그때 기록된다.
  */
 @Injectable()
 export class RecordStockMovementsUsecase {
@@ -28,6 +34,10 @@ export class RecordStockMovementsUsecase {
   ) {}
 
   execute(request: RecordStockMovementsRequest): Promise<RecordStockMovementsResult> {
+    return retryOnConflict(StockMovementConflict, () => this.attempt(request));
+  }
+
+  private attempt(request: RecordStockMovementsRequest): Promise<RecordStockMovementsResult> {
     const { movements } = request;
     return this.tx.run(async () => {
       const products = await this.catalog.productsBySku(movements.map((m) => m.sku));
