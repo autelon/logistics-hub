@@ -38,6 +38,6 @@ tools: Read, Glob, Grep, Bash, Write
 
 출력
 
-- 결과는 director(메인 에이전트)가 지시한 handoff 절대 경로에도 쓴다: 판정, head sha, 확인한 것, 머지 여부.
-- 개인 리소스 정보(Notion URL·ID, 로컬 절대 경로, 계정 정보)를 코멘트·handoff 에 쓰지 않는다.
+- 기록은 PR 코멘트다. handoff 파일은 쓰지 않는다. director 에게는 판정, head sha, 머지 여부를 최종 응답으로 돌려준다.
+- 개인 리소스 정보(Notion URL·ID, 로컬 절대 경로, 계정 정보)를 코멘트에 쓰지 않는다.
 - 반복되는 결함 유형은 메모리에 남긴다.
