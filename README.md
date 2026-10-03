@@ -142,7 +142,7 @@ packages/
   contracts                  Cross-service contracts: event/request schemas (zod), response types
   messaging                  MessageBus interface + Redis Streams and in-memory adapters
   db-kit                     Drizzle building blocks: outbox, inbox, column conventions
-  nest-kit                   Nest building blocks: infra module, zod pipe, env loading
+  nest-kit                   Nest building blocks: infra module, typed config, logger, zod pipe
   typescript-config          Shared tsconfig presets
 docs/                        Design documents
 ```

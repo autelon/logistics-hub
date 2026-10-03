@@ -44,6 +44,8 @@
 - **패키지는 `dist` 로 소비된다.** `packages/*` 를 고친 뒤 앱에서 `tsc` 나 `vitest` 를 직접 돌리면 옛 타입을 본다.
   turbo 로 돌리거나 먼저 `pnpm build` 한다.
 - **타입 인지 린트 규칙은 `oxlint-disable-next-line` 주석으로 꺼지지 않는다.** 꼭 필요하면 `.oxlintrc.json` 의 `overrides` 에 파일 단위로 넣는다.
+- **oxlint 의 `overrides` 는 같은 규칙의 옵션을 합치지 않는다.** 파일에 맞는 마지막 override 의 옵션이 앞의 것을 통째로 대체한다.
+  그래서 `.oxlintrc.json` 의 `eslint/no-restricted-imports` 는 override 마다 Nest 예외 금지(`paths`)를 반복해 적어 두었다. 한 곳을 고치면 나머지도 고친다.
 - **`apps/web` 은 zod 를 직접 import 하지 않는다.** 필요한 타입은 `@repo/contracts` 에서 export 해서 쓴다.
 - **스키마를 바꾸면 `db:generate` 로 마이그레이션을 만든다.** `drizzle/` 아래 생성물은 손으로 고치지 않는다.
   서비스의 테이블은 `src/db/schema.ts` 한 파일에 둔다.
@@ -52,16 +54,19 @@
 
 ## 깨면 안 되는 설계 원칙
 
+- **모든 테이블의 기본 키는 앱에서 만든 UUIDv7 `id` 하나다.** 코드(`sku`, `code`)는 unique 컬럼, 외래 키는 `id` 참조, 밖에 보여 줄 번호는 `public_id`. 규칙은 `docs/02-domain-model.md` 의 "기본 키".
 - **`unit_events` 는 추가만 한다.** 수정·삭제하지 않는다. 틀린 사실은 `unit_event_corrections` 에 정정 기록을 추가해 무효화한다.
 - **`units` 의 상태 컬럼은 캐시다.** 직접 고치지 않고, 유효한 사실들을 `projectUnit` 으로 접어서 다시 만든다.
 - **업체가 보고한 사실은 순서가 이상해도 거부하지 않는다.** 반영하고 `anomalies` 에 표시한다.
-- **서비스 간 이벤트는 반드시 아웃박스로 낸다.** 업무 데이터를 바꾸는 트랜잭션 안에서 `enqueue(tx, ...)`.
+- **서비스 간 이벤트는 반드시 아웃박스로 낸다.** 업무 데이터를 바꾸는 트랜잭션 안에서 `EventOutbox.enqueue(...)` (아직 옮기지 않은 코드는 `enqueue(tx, ...)`).
   `MessageBus.publish` 를 서비스 코드에서 직접 부르지 않는다.
 - **이벤트 핸들러는 멱등이어야 한다.** 같은 메시지가 두 번 올 수 있다 (`claimMessage` 또는 `idempotencyKey`).
 - **서비스 간 규격(이벤트, 요청 스키마, 응답 타입)은 `@repo/contracts` 에만 정의한다.**
   서비스끼리 서로의 코드나 DB 를 직접 참조하지 않고, 동기 HTTP 호출도 하지 않는다.
 - **에러 응답에는 항상 문자열 `code` 가 있다.** 서비스 코드는 Nest 내장 예외 대신 자기 앱의 `errors.ts` 로 던진다 (`throw scmError('UNIT_NOT_FOUND', '보조 설명')`).
   새 코드는 `@repo/contracts` 의 해당 서비스 `*ErrorCode` 에 추가하고 `errors.ts` 에 상태를 적는다. `message` 는 선택이고, 호출 측 분기는 `code` 로만 한다.
+- **설정은 `@Inject(xConfig.KEY) x: ConfigType<typeof xConfig>` 로만 읽는다** (`@repo/nest-kit/config`). 앱 코드의 `process.env` 와 `ConfigService` 는 린트 오류다.
+  **로그는 `new Logger(클래스.name)`** 으로 남긴다. `main.ts` 가 설치한 `AppLogger` 로 넘어가므로 `ConsoleLogger` 를 직접 만들지 않는다.
 - **판단 규칙은 순수 함수로 빼고 테스트한다** (예: `unit-projection.ts`, `fulfillment.ts`). 서비스 클래스에 규칙을 섞지 않는다.
 
 ## 작업 방식과 구조

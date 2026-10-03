@@ -1,15 +1,17 @@
-import { index, int, mysqlTable, primaryKey, unique, varchar } from 'drizzle-orm/mysql-core';
+import { index, int, mysqlTable, unique, varchar } from 'drizzle-orm/mysql-core';
 
 import type { FulfillmentItemStatus, FulfillmentReason, SellableKind } from '@repo/contracts/oms';
 import { idColumn, utcDateTime } from '@repo/db-kit/columns';
 import { processedMessages } from '@repo/db-kit/inbox';
 import { outboxEvents } from '@repo/db-kit/outbox';
+import { publicIdColumn, publicIdCounters } from '@repo/db-kit/public-id';
 
-export { outboxEvents, processedMessages };
+export { outboxEvents, processedMessages, publicIdCounters };
 
 /** 채널에서 파는 단위. 단품도 "구성품 1개짜리"로 같은 구조에 담는다. */
 export const sellables = mysqlTable('sellables', {
-  code: varchar({ length: 64 }).primaryKey(),
+  id: idColumn().primaryKey(),
+  code: varchar({ length: 64 }).notNull().unique(),
   name: varchar({ length: 200 }).notNull(),
   kind: varchar({ length: 16 }).$type<SellableKind>().notNull(),
   createdAt: utcDateTime().notNull(),
@@ -18,19 +20,22 @@ export const sellables = mysqlTable('sellables', {
 export const sellableComponents = mysqlTable(
   'sellable_components',
   {
-    sellableCode: varchar({ length: 64 })
+    id: idColumn().primaryKey(),
+    sellableId: idColumn()
       .notNull()
-      .references(() => sellables.code),
+      .references(() => sellables.id),
     sku: varchar({ length: 64 }).notNull(),
     quantity: int().notNull(),
   },
-  (t) => [primaryKey({ columns: [t.sellableCode, t.sku] })],
+  (t) => [unique('sellable_components_sellable_sku_uq').on(t.sellableId, t.sku)],
 );
 
 export const orders = mysqlTable(
   'orders',
   {
     id: idColumn().primaryKey(),
+    /** 외부에 보여 주는 주문 번호 (`ORD-2026-000123`). 내부 참조에는 쓰지 않는다. */
+    publicId: publicIdColumn().notNull().unique(),
     channel: varchar({ length: 50 }).notNull(),
     channelOrderNo: varchar({ length: 100 }).notNull(),
     orderedAt: utcDateTime().notNull(),

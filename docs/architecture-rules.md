@@ -7,7 +7,7 @@
 
 ```
 apps/<service>/src/
-  main.ts  app.module.ts  env.ts  errors.ts
+  main.ts  app.module.ts  errors.ts      설정은 env.ts 가 아니라 @repo/nest-kit/config 의 네임스페이스로 주입받는다
   db/schema.ts                      테이블 정의 전체 (drizzle-kit 이 읽는 단일 파일)
   domains/
     <domain>/
@@ -57,6 +57,10 @@ presentation ──▶ usecases ──▶ application ──▶ domain ◀──
 - **presentation 은 항상 usecase 를 거친다.** 단순 조회도 예외가 아니다. 얇은 usecase 가 하나 생기는 비용보다 "언제 건너뛰어도 되나"를 매번 판단하는 비용이 크다.
 - **도메인은 서로를 import 하지 않는다.** A 의 처리에 B 의 데이터가 필요하면 usecase 가 B 에서 읽어 A 에 넘긴다.
 - 이 표는 린트(`no-restricted-imports`)로 강제한다. 린트를 끄거나 우회하지 않는다.
+  규칙은 `.oxlintrc.json` 의 `overrides` 에 있고, import 경로 문자열을 정규식으로 검사한다. 그래서 잡지 못하는 것이 있다:
+  - 다른 도메인 import 는 레이어 폴더 바로 아래 파일(`domains/<a>/domain/x.ts`)과 `<a>.module.ts` 에서만 빠짐없이 잡힌다.
+    레이어 폴더 안에 하위 폴더를 만들면 `../../../<b>/...` 형태가 검사를 빠져나가므로 하위 폴더를 만들지 않는다.
+  - `domain` 이 `@repo/contracts` 에서 값 타입이 아닌 것(요청·응답 타입)을 가져오는 것, `application` 이 `@repo/db-kit` 을 가져오는 것은 검사하지 않는다. 검토에서 본다.
 
 ## Repository
 
@@ -90,13 +94,67 @@ constructor(@Inject(UnitRepository) private readonly units: UnitRepository) {}
 ## 트랜잭션
 
 - **트랜잭션은 usecase 가 연다.** `TransactionRunner` 를 주입받아 `this.tx.run(async () => { ... })` 로 감싼다.
-- application 과 repository 는 트랜잭션을 인자로 받지 않는다. repository 는 현재 실행 컨텍스트의 연결을 쓰고, `run` 안에서 불리면 자동으로 그 트랜잭션에 참여한다.
+- application 과 repository 는 트랜잭션을 인자로 받지 않는다. repository 는 `CurrentDb` 를 주입받아 쿼리할 때마다 `this.db.get()` 으로 현재 실행 컨텍스트의 연결을 얻는다. `run` 안에서 불리면 그 트랜잭션 핸들이, 밖이면 루트 연결(자동 커밋)이 나온다.
 - 조회만 하는 usecase 는 `run` 으로 감싸지 않는다.
+- `run` 안에서 `run` 을 또 부르면 새로 열지 않고 바깥 트랜잭션에 합류한다. 커밋·롤백은 가장 바깥 `run` 이 정한다.
+
+포트는 모두 `InfraModule` 이 전역으로 제공한다. 인터페이스와 토큰이 같은 이름이므로 값 import(`import { X }`)로 가져온다.
+
+| 포트                | import                              | 쓰는 레이어   |
+| ------------------- | ----------------------------------- | ------------- |
+| `TransactionRunner` | `@repo/nest-kit/transaction-runner` | `usecases`    |
+| `CurrentDb`         | `@repo/nest-kit/current-db`         | `infra`       |
+| `EventOutbox`       | `@repo/nest-kit/event-outbox`       | `application` |
+| `MessageInbox`      | `@repo/nest-kit/message-inbox`      | `usecases`    |
+
+```ts
+// domains/unit/infra/drizzle-unit.repository.ts
+import type * as schema from '../../../db/schema.js';
+
+constructor(@Inject(CurrentDb) private readonly db: CurrentDb<typeof schema>) {}
+
+async findBySerial(serialNumber: string) {
+  const [row] = await this.db.get().select().from(units).where(eq(units.serialNumber, serialNumber));
+  return row && toUnit(row);
+}
+
+// usecases/record-unit-event.usecase.ts
+constructor(
+  @Inject(TransactionRunner) private readonly tx: TransactionRunner,
+  private readonly units: UnitService,
+) {}
+
+execute(request: RecordUnitEventRequest) {
+  return this.tx.run(async () => toView(await this.units.record(request)));
+}
+```
+
+- `this.db.get()` 의 반환값을 필드나 생성자에서 보관하지 않는다. 보관한 연결은 트랜잭션에 참여하지 못한다.
+- `InfraModule` 의 `DB` 토큰(루트 연결)과 `enqueue(tx, ...)`·`claimMessage(tx, ...)` 는 옮기기 전 코드를 위한 것이다. `DB` 로 실행한 쿼리는 `run` 에 참여하지 않으므로 새 구조에서는 쓰지 않는다.
 
 ## 이벤트
 
 - 다른 서비스로 내보내는 이벤트는 application 서비스가 `EventOutbox` 포트로 적는다. usecase 가 연 트랜잭션에 같이 묶인다.
-- 받는 쪽은 `presentation/consumer` 다. 메시지를 `@repo/contracts` 스키마로 검증한 뒤 usecase 를 부른다. 멱등 처리는 usecase 의 트랜잭션 안에서 한다.
+- 받는 쪽은 `presentation/consumer` 다. 메시지를 `@repo/contracts` 스키마로 검증한 뒤 usecase 를 부른다. 멱등 처리는 usecase 의 트랜잭션 안에서 `MessageInbox.claim` 으로 한다. 트랜잭션 밖에서 부르면 예외가 난다.
+
+```ts
+// domains/service-case/application/service-case.service.ts
+constructor(
+  @Inject(ServiceCaseRepository) private readonly cases: ServiceCaseRepository,
+  @Inject(EventOutbox) private readonly outbox: EventOutbox,
+) {}
+
+await this.cases.save(updated);
+await this.outbox.enqueue(Topics.asCaseEvents, updated.serialNumber, makeEvent('as.doa.confirmed', { ... }));
+
+// usecases/apply-doa-confirmed.usecase.ts  (consumer 가 부른다)
+execute(message: { id: string; event: DoaConfirmed }) {
+  return this.tx.run(async () => {
+    if (!(await this.inbox.claim(CONSUMER_GROUP, message.id))) return;
+    await this.orders.requestReplacement(message.event);
+  });
+}
+```
 
 ## 타입과 규격
 
@@ -122,6 +180,9 @@ constructor(@Inject(UnitRepository) private readonly units: UnitRepository) {}
 
 - 도메인 폴더 이름은 단수 명사 (`unit`, `order`, `service-case`).
 - usecase 는 파일 하나에 클래스 하나, 공개 메서드는 `execute` 하나.
+- `usecases/` 에는 usecase 외에 **여러 usecase 가 함께 쓰는 보조 파일**만 둘 수 있다: 도메인 타입 → 응답 타입 변환(`<도메인>-view.ts`), 컨슈머 그룹 상수(`consumer-group.ts`). 그 밖의 로직은 두지 않는다.
+- `id` 와 `publicId` 는 **repository 가 저장할 때 발급**한다 (`@repo/db-kit` 은 `infra` 만 import 할 수 있다). 그래서 domain 은 저장 전 객체를 `New<이름>` 타입(id 없음)으로 두고, `repository.insert(draft)` 가 저장된 객체를 돌려준다.
+- `application` 은 이벤트를 만들 때 `@repo/contracts` 의 `makeEvent`, `Topics`, 이벤트 타입을 쓴다. 규격의 값 타입과 같은 취급이다.
 
 ## 테스트
 
@@ -136,13 +197,3 @@ constructor(@Inject(UnitRepository) private readonly units: UnitRepository) {}
 3. `application` 서비스에 한 도메인 안의 흐름.
 4. `usecases` 에 요청 하나의 처리 전체.
 5. `presentation` 에 controller 나 consumer. 요청·응답 규격은 `@repo/contracts`.
-
-## 이행 상태
-
-이 규칙은 2026-10-03 에 정했고, 기존 코드는 아직 기능별 폴더(`units/`, `orders/`, `cases/` 등)에 controller·service 가 함께 있다.
-아래 순서로 옮긴다. 옮긴 서비스는 목록에서 지우고, 전부 끝나면 이 절을 삭제한다.
-
-- [ ] 공용 부품: `TransactionRunner`, `EventOutbox`, 레이어 의존 린트 규칙
-- [ ] `scm-api` (도메인: `catalog`, `unit`)
-- [ ] `oms-api` (도메인: `sellable`, `order`)
-- [ ] `as-api` (도메인: `service-case`)

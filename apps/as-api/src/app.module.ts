@@ -1,18 +1,20 @@
 import { Module } from '@nestjs/common';
 
-import { HealthController } from '@repo/nest-kit/health.controller';
+import { serviceConfigModule } from '@repo/nest-kit/config';
 import { InfraModule } from '@repo/nest-kit/infra.module';
+import { LoggerModule } from '@repo/nest-kit/logger.module';
 
-import { CasesController } from './cases/cases.controller.js';
-import { CasesService } from './cases/cases.service.js';
 import * as schema from './db/schema.js';
-import { env } from './env.js';
+import { ApiModule } from './presentation/api/api.module.js';
 
 @Module({
   imports: [
-    InfraModule.forRoot({ databaseUrl: env.DATABASE_URL, schema, redisUrl: env.REDIS_URL }),
+    serviceConfigModule({
+      defaults: { PORT: 3003, DATABASE_URL: 'mysql://root:root@localhost:3306/lh_as' },
+    }),
+    LoggerModule,
+    InfraModule.forRoot({ schema }),
+    ApiModule,
   ],
-  controllers: [HealthController, CasesController],
-  providers: [CasesService],
 })
 export class AppModule {}

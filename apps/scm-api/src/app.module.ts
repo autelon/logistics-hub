@@ -1,20 +1,22 @@
 import { Module } from '@nestjs/common';
 
-import { HealthController } from '@repo/nest-kit/health.controller';
+import { serviceConfigModule } from '@repo/nest-kit/config';
 import { InfraModule } from '@repo/nest-kit/infra.module';
+import { LoggerModule } from '@repo/nest-kit/logger.module';
 
-import { CatalogController } from './catalog/catalog.controller.js';
 import * as schema from './db/schema.js';
-import { env } from './env.js';
-import { AsEventsConsumer } from './integration/as-events.consumer.js';
-import { UnitsController } from './units/units.controller.js';
-import { UnitsService } from './units/units.service.js';
+import { ApiModule } from './presentation/api/api.module.js';
+import { ConsumerModule } from './presentation/consumer/consumer.module.js';
 
 @Module({
   imports: [
-    InfraModule.forRoot({ databaseUrl: env.DATABASE_URL, schema, redisUrl: env.REDIS_URL }),
+    serviceConfigModule({
+      defaults: { PORT: 3001, DATABASE_URL: 'mysql://root:root@localhost:3306/lh_scm' },
+    }),
+    LoggerModule,
+    InfraModule.forRoot({ schema }),
+    ApiModule,
+    ConsumerModule,
   ],
-  controllers: [HealthController, CatalogController, UnitsController],
-  providers: [UnitsService, AsEventsConsumer],
 })
 export class AppModule {}

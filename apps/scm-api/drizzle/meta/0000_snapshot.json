@@ -1,12 +1,19 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "fe7402ba-b247-4ab9-8489-0247496d8fec",
+  "id": "ef0d51a5-cbdb-48d4-9e0d-428977d33360",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "locations": {
       "name": "locations",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "code": {
           "name": "code",
           "type": "varchar(64)",
@@ -46,14 +53,21 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "locations_code": {
-          "name": "locations_code",
+        "locations_id": {
+          "name": "locations_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "locations_code_unique": {
+          "name": "locations_code_unique",
           "columns": [
             "code"
           ]
         }
       },
-      "uniqueConstraints": {},
       "checkConstraint": {}
     },
     "outbox_events": {
@@ -127,6 +141,13 @@
     "products": {
       "name": "products",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "sku": {
           "name": "sku",
           "type": "varchar(64)",
@@ -152,14 +173,21 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "products_sku": {
-          "name": "products_sku",
+        "products_id": {
+          "name": "products_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "products_sku_unique": {
+          "name": "products_sku_unique",
           "columns": [
             "sku"
           ]
         }
       },
-      "uniqueConstraints": {},
       "checkConstraint": {}
     },
     "unit_event_corrections": {
@@ -293,9 +321,9 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_code": {
-          "name": "location_code",
-          "type": "varchar(64)",
+        "location_id": {
+          "name": "location_id",
+          "type": "varchar(36)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -374,15 +402,15 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "unit_events_location_code_locations_code_fk": {
-          "name": "unit_events_location_code_locations_code_fk",
+        "unit_events_location_id_locations_id_fk": {
+          "name": "unit_events_location_id_locations_id_fk",
           "tableFrom": "unit_events",
           "tableTo": "locations",
           "columnsFrom": [
-            "location_code"
+            "location_id"
           ],
           "columnsTo": [
-            "code"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -423,9 +451,9 @@
           "notNull": true,
           "autoincrement": false
         },
-        "sku": {
-          "name": "sku",
-          "type": "varchar(64)",
+        "product_id": {
+          "name": "product_id",
+          "type": "varchar(36)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -437,9 +465,9 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_code": {
-          "name": "location_code",
-          "type": "varchar(64)",
+        "location_id": {
+          "name": "location_id",
+          "type": "varchar(36)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -484,36 +512,36 @@
         "units_stock_idx": {
           "name": "units_stock_idx",
           "columns": [
-            "sku",
-            "location_code",
+            "product_id",
+            "location_id",
             "status"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "units_sku_products_sku_fk": {
-          "name": "units_sku_products_sku_fk",
+        "units_product_id_products_id_fk": {
+          "name": "units_product_id_products_id_fk",
           "tableFrom": "units",
           "tableTo": "products",
           "columnsFrom": [
-            "sku"
+            "product_id"
           ],
           "columnsTo": [
-            "sku"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "units_location_code_locations_code_fk": {
-          "name": "units_location_code_locations_code_fk",
+        "units_location_id_locations_id_fk": {
+          "name": "units_location_id_locations_id_fk",
           "tableFrom": "units",
           "tableTo": "locations",
           "columnsFrom": [
-            "location_code"
+            "location_id"
           ],
           "columnsTo": [
-            "code"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
