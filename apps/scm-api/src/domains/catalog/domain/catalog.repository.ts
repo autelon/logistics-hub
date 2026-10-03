@@ -5,6 +5,7 @@ export interface CatalogRepository {
   upsertProduct(input: ProductInput): Promise<void>;
   listProducts(): Promise<Product[]>;
   findProductBySku(sku: string): Promise<Product | undefined>;
+  findProductsBySkus(skus: readonly string[]): Promise<Product[]>;
   findProductById(id: string): Promise<Product | undefined>;
   findProductsByIds(ids: readonly string[]): Promise<Product[]>;
 
@@ -17,6 +18,7 @@ export interface CatalogRepository {
    * (REPEATABLE READ 의 스냅샷은 첫 일반 읽기 때 잡히므로, 그 뒤에 잠금을 얻으면 먼저 커밋된 변경을 못 본다).
    */
   findLocationByCodeForUpdate(code: string): Promise<Location | undefined>;
+  findLocationsByCodes(codes: readonly string[]): Promise<Location[]>;
   findLocationById(id: string): Promise<Location | undefined>;
 }
 export const CatalogRepository = Symbol('CatalogRepository');

@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { CatalogModule } from '../domains/catalog/catalog.module.js';
 import { DeviceRequestModule } from '../domains/device-request/device-request.module.js';
 import { UnitModule } from '../domains/unit/unit.module.js';
+import { WarehouseModule } from '../domains/warehouse/warehouse.module.js';
 import { ApplyAsCaseEventUsecase } from './apply-as-case-event.usecase.js';
 import { CorrectUnitEventUsecase } from './correct-unit-event.usecase.js';
 import { GetDeviceRequestUsecase } from './get-device-request.usecase.js';
@@ -14,11 +15,13 @@ import { ListLocationPolicyChangesUsecase } from './list-location-policy-changes
 import { ListLocationsUsecase } from './list-locations.usecase.js';
 import { ListProductsUsecase } from './list-products.usecase.js';
 import { NotifyDeviceRequestUsecase } from './notify-device-request.usecase.js';
+import { RecordStockMovementsUsecase } from './record-stock-movements.usecase.js';
 import { RecordUnitEventUsecase } from './record-unit-event.usecase.js';
 import { RegisterLocationUsecase } from './register-location.usecase.js';
 import { RegisterProductUsecase } from './register-product.usecase.js';
 import { RegisterUnitsUsecase } from './register-units.usecase.js';
 import { ReportDeviceResultsUsecase } from './report-device-results.usecase.js';
+import { ReverseStockMovementUsecase } from './reverse-stock-movement.usecase.js';
 import { UpdateLocationPolicyUsecase } from './update-location-policy.usecase.js';
 
 const usecases = [
@@ -39,10 +42,12 @@ const usecases = [
   ListDeviceRequestUnitsUsecase,
   ReportDeviceResultsUsecase,
   NotifyDeviceRequestUsecase,
+  RecordStockMovementsUsecase,
+  ReverseStockMovementUsecase,
 ];
 
 @Module({
-  imports: [CatalogModule, UnitModule, DeviceRequestModule],
+  imports: [CatalogModule, UnitModule, DeviceRequestModule, WarehouseModule],
   providers: usecases,
   exports: usecases,
 })

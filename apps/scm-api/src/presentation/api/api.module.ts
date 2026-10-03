@@ -5,6 +5,7 @@ import { HealthController } from '@repo/nest-kit/health.controller';
 import { UsecasesModule } from '../../usecases/usecases.module.js';
 import { CatalogController } from './catalog.controller.js';
 import { DeviceRequestsController } from './device-requests.controller.js';
+import { StockMovementsController } from './stock-movements.controller.js';
 import { UnitRegistrationsController } from './unit-registrations.controller.js';
 import { UnitsController } from './units.controller.js';
 
@@ -16,6 +17,7 @@ import { UnitsController } from './units.controller.js';
     UnitsController,
     UnitRegistrationsController,
     DeviceRequestsController,
+    StockMovementsController,
   ],
 })
 export class ApiModule {}

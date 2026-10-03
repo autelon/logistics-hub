@@ -166,8 +166,9 @@ get $SCM/units/CAM-A-$RUN
 get $SCM/stock
 ```
 
-기대 → 200: 배열에 `{"sku":"CAM-01","locationCode":null,"status":"DELIVERED","registered":false,"quantity":N}` 이 있다 (N 은 이 DB 에 배송 완료된 CAM-01 수. 깨끗한 DB 면 1).
-행은 sku, 거점, 상태, 등록 여부별로 하나씩이고, 이전 실행의 제품도 집계된다.
+기대 → 200: 배열에 `{"sku":"CAM-01","trackingMode":"SERIAL","locationCode":null,"status":"DELIVERED","registered":false,"lotNo":null,"stockStatus":null,"quantity":N}` 이 있다 (N 은 이 DB 에 배송 완료된 CAM-01 수. 깨끗한 DB 면 정확히 이 한 줄이고 N 은 1).
+개체(`unit_events`)로 센 행은 `trackingMode` 가 `SERIAL`, `lotNo`·`stockStatus` 가 `null` 이다 — 이 플레이북의 제품은 등록이 필요 없게 `NONE` 으로 등록했지만 개체를 쌓아 쓰므로 행의 근거는 개체다.
+행은 sku, 거점, 상태, 등록 여부별로 하나씩이고, 이전 실행의 제품도 집계된다. 시리얼 없는 제품의 수량 원장 행은 [warehouse.md](warehouse.md).
 
 ## 에러 코드
 
@@ -299,7 +300,34 @@ get $SCM/stock
 조회 → 200: `status` `IN_STOCK`, `locationCode` `SVC-SEL`. `events` 끝의 두 개는
 무효화된 RECEIVED @WH-ICN (`correction.reason` `입고 거점 오기재`, `correction.replacementEventId` = 대체 사실의 id) 와
 대체 RECEIVED @SVC-SEL (`source` `{"system":"logistics-hub:correction","ref":"operator-1"}`, `correction: null`).
-재고에는 `{"sku":"CAM-01","locationCode":"SVC-SEL","status":"IN_STOCK","registered":false,"quantity":1}` 이 있고 WH-ICN 쪽 IN_STOCK 은 이 제품만큼 줄어 있다.
+재고 → 200 (깨끗한 DB 면 정확히 이 두 줄):
+
+```json
+[
+  {
+    "sku": "CAM-01",
+    "trackingMode": "SERIAL",
+    "locationCode": null,
+    "status": "DELIVERED",
+    "registered": false,
+    "lotNo": null,
+    "stockStatus": null,
+    "quantity": 1
+  },
+  {
+    "sku": "CAM-01",
+    "trackingMode": "SERIAL",
+    "locationCode": "SVC-SEL",
+    "status": "IN_STOCK",
+    "registered": false,
+    "lotNo": null,
+    "stockStatus": null,
+    "quantity": 1
+  }
+]
+```
+
+WH-ICN 의 IN_STOCK 행은 없다 (CAM-B 가 대체 사실로 SVC-SEL 로 옮겨졌고 CAM-A 는 배송 완료다).
 
 ## 멱등 키
 

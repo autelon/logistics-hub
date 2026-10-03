@@ -37,6 +37,20 @@ export const UnitStatus = z.enum([
 ]);
 export type UnitStatus = z.infer<typeof UnitStatus>;
 
+/** 수량 원장의 재고 상태. 가용 재고는 AVAILABLE 만 센다. */
+export const StockStatus = z.enum(['AVAILABLE', 'HOLD', 'QC']);
+export type StockStatus = z.infer<typeof StockStatus>;
+
+/** 수량 이동의 사유. 정정(역분개)은 ADJUSTMENT 로 기록한다. */
+export const StockMovementReason = z.enum([
+  'GOODS_RECEIPT',
+  'TRANSFER',
+  'SHIPMENT',
+  'SCRAP',
+  'ADJUSTMENT',
+]);
+export type StockMovementReason = z.infer<typeof StockMovementReason>;
+
 export const LocationType = z.enum(['FACTORY', 'WAREHOUSE', 'SERVICE_CENTER']);
 export type LocationType = z.infer<typeof LocationType>;
 
@@ -100,6 +114,9 @@ export const ScmErrorCode = z.enum([
   'SERIAL_SKU_MISMATCH', // 이미 다른 SKU 로 등록된 시리얼
   'DEVICE_REQUEST_NOT_FOUND',
   'DEVICE_REQUEST_UNKNOWN_SERIAL', // 결과에 그 기기 요청에 속하지 않는 시리얼이 있음. details 에 시리얼 목록
+  'QUANTITY_TRACKING_ONLY', // 시리얼 추적 제품은 수량 이동으로 기록하지 않는다. details 에 항목 번호
+  'MOVEMENT_NOT_FOUND',
+  'MOVEMENT_ALREADY_REVERSED', // 수량 이동은 한 번만 역분개할 수 있다
 ]);
 export type ScmErrorCode = z.infer<typeof ScmErrorCode>;
 
@@ -174,6 +191,44 @@ export const RegisterUnitsRequest = z.object({
   actor: z.string().min(1).max(100),
 });
 export type RegisterUnitsRequest = z.infer<typeof RegisterUnitsRequest>;
+
+/** 수량 이동 한 건. 출발지와 도착지 중 적어도 하나는 있어야 한다 (한쪽이 비면 입고 또는 출고·폐기). */
+export const StockMovementInput = z
+  .object({
+    sku: z.string().min(1).max(64),
+    /** 로트 제품도 생략할 수 있다 (로트 없음으로 저장). */
+    lotNo: z.string().min(1).max(100).nullable().default(null),
+    fromLocationCode: z.string().min(1).max(64).nullable().default(null),
+    toLocationCode: z.string().min(1).max(64).nullable().default(null),
+    quantity: z.number().int().min(1).max(2_147_483_647),
+    stockStatus: StockStatus.default('AVAILABLE'),
+    reason: StockMovementReason,
+    occurredAt: IsoDateTime,
+    source: z.object({
+      system: z.string().min(1).max(100),
+      ref: z.string().max(200).nullable().default(null),
+    }),
+    /** 같은 보고가 다시 와도 한 번만 기록되게 하는 키. */
+    idempotencyKey: z.string().min(1).max(200).optional(),
+    note: z.string().max(500).nullable().default(null),
+  })
+  .refine((movement) => movement.fromLocationCode !== null || movement.toLocationCode !== null, {
+    message: 'fromLocationCode or toLocationCode is required',
+  });
+export type StockMovementInput = z.infer<typeof StockMovementInput>;
+
+/** 수량 이동을 한꺼번에 기록한다 (한 트랜잭션). 하나라도 거절되면 전부 기록하지 않는다. */
+export const RecordStockMovementsRequest = z.object({
+  movements: z.array(StockMovementInput).min(1).max(1000),
+});
+export type RecordStockMovementsRequest = z.infer<typeof RecordStockMovementsRequest>;
+
+/** 수량 이동을 반대 방향의 이동으로 정정한다. 원래 이동은 바뀌지 않는다. */
+export const ReverseStockMovementRequest = z.object({
+  reason: z.string().min(1).max(500),
+  actor: z.string().min(1).max(100),
+});
+export type ReverseStockMovementRequest = z.infer<typeof ReverseStockMovementRequest>;
 
 /** 기기 서버가 시리얼 목록을 페이지로 가져갈 때의 쿼리. cursor 는 이전 페이지가 준 nextCursor. */
 export const DeviceRequestUnitsQuery = z.object({
@@ -270,13 +325,34 @@ export interface UnitLifecycleView {
   anomalies: string[];
   events: UnitEventView[];
 }
+/**
+ * 재고 한 줄. 시리얼 제품은 개체 상태별 개수(`registered` 있음, `lotNo`·`stockStatus` 는 null),
+ * 수량 제품은 수량 원장의 합(`status` 는 `IN_STOCK`, `registered` 는 null)이다.
+ */
 export interface StockRow {
   sku: string;
+  trackingMode: TrackingMode;
   locationCode: string | null;
   status: UnitStatus;
-  /** 제품으로 등록되었는지(`REGISTERED` 사실이 유효한지). */
-  registered: boolean;
+  /** 제품으로 등록되었는지(`REGISTERED` 사실이 유효한지). 수량 제품은 등록 대상이 아니라 null. */
+  registered: boolean | null;
+  lotNo: string | null;
+  /** 수량 원장의 재고 상태. 시리얼 제품은 null. */
+  stockStatus: StockStatus | null;
+  /** 수량 제품은 음수일 수 있다 (보고 오류를 드러내려고 그대로 돌려준다). */
   quantity: number;
+}
+export interface RecordStockMovementsResult {
+  /** 요청의 movements 와 같은 순서. */
+  movements: {
+    movementId: string;
+    /** 같은 idempotencyKey 의 이동이 이미 있어 새로 기록하지 않았다. */
+    duplicate: boolean;
+  }[];
+}
+export interface ReverseStockMovementResult {
+  /** 정정으로 새로 기록한 반대 방향의 이동. */
+  movementId: string;
 }
 export interface RegisterUnitsResult {
   /** 이번 명령으로 만든 기기 요청. 등록된 것이 하나도 없으면 null. */

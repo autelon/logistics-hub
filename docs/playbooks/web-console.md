@@ -46,13 +46,13 @@
 
 ### 4. 재고
 
-`/stock` 을 연다. 기대: 카드 제목 `SKU · 거점 · 상태별 수량 (정정 반영)`, 표 머리 `SKU 거점 상태 등록 수량`.
-행은 `get $SCM/stock` 의 배열과 같은 순서·같은 값이고, 거점이 `null` 이면 `—`, `registered` 가 `false` 면 `미등록`(`true` 면 `등록` 배지)으로 보인다. 예 (이 DB 에 플레이북 데이터만 있을 때):
+`/stock` 을 연다. 기대: 카드 제목 `SKU · 거점 · 상태별 수량 (정정 반영)`, 표 머리 `SKU 추적 거점 상태 등록 로트 재고 상태 수량`.
+행은 `get $SCM/stock` 의 배열과 같은 순서·같은 값이고, 거점이 `null` 이면 `—`, `registered` 가 `false` 면 `미등록`(`true` 면 `등록` 배지, 수량 제품처럼 `null` 이면 `—`)으로 보인다. `추적` 은 `trackingMode` 배지, `로트` 는 `lotNo`(없으면 `—`), `재고 상태` 는 `stockStatus` 배지(시리얼 행은 `—`)다. 시리얼 행이 먼저, 수량 행이 그다음이다 ([warehouse.md](warehouse.md) 14 의 데이터를 넣었다면 `WH-L` 행 셋에 로트 `—`·`LOT-1`·`LOT-1`, 재고 상태 `AVAILABLE`·`AVAILABLE`·`QC`, 수량 `-5` 가 음수 그대로 보인다). 예 (이 DB 에 플레이북 데이터만 있을 때):
 
 ```
-CAM-01  —        DELIVERED  미등록  2     ← CAM-A (scm-api.md 22 뒤), CAM-C (oms-api.md 14: 출고 무효화 뒤 배송 완료만 남아도 거점은 비어 있다)
-CAM-01  —        DOA        미등록  1     ← CAM-D (oms-api.md 17 에서 DOA 확정)
-CAM-01  SVC-SEL  IN_STOCK   미등록  1     ← CAM-B
+CAM-01  SERIAL  —        DELIVERED  미등록  —  —  2     ← CAM-A (scm-api.md 22 뒤), CAM-C (oms-api.md 14: 출고 무효화 뒤 배송 완료만 남아도 거점은 비어 있다)
+CAM-01  SERIAL  —        DOA        미등록  —  —  1     ← CAM-D (oms-api.md 17 에서 DOA 확정)
+CAM-01  SERIAL  SVC-SEL  IN_STOCK   미등록  —  —  1     ← CAM-B
 ```
 
 (이 제품들은 `NONE` 이라 등록하지 않는다. 등록된 행은 아래 7 에서.)

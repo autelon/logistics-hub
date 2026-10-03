@@ -70,36 +70,48 @@ echo
 get $SCM/stock
 ```
 
-기대: 상태 코드는 모두 `201` (3 × 8 + 2 = 26개). 재고 → 200 (깨끗한 DB 면 정확히 이 네 줄이고, `registered` 는 전부 `false`):
+기대: 상태 코드는 모두 `201` (3 × 8 + 2 = 26개). 재고 → 200 (깨끗한 DB 면 정확히 이 네 줄이고, `registered` 는 전부 `false`, `trackingMode` 는 개체로 센 행이라 전부 `SERIAL`, `lotNo`·`stockStatus` 는 `null`):
 
 ```json
 [
   {
     "sku": "BAT-01",
+    "trackingMode": "SERIAL",
     "locationCode": "WH-ICN",
     "status": "IN_STOCK",
     "registered": false,
+    "lotNo": null,
+    "stockStatus": null,
     "quantity": 1
   },
   {
     "sku": "CAM-01",
+    "trackingMode": "SERIAL",
     "locationCode": null,
     "status": "SHIPPED",
     "registered": false,
+    "lotNo": null,
+    "stockStatus": null,
     "quantity": 1
   },
   {
     "sku": "CAM-01",
+    "trackingMode": "SERIAL",
     "locationCode": "FAC-SZ",
     "status": "PRODUCED",
     "registered": false,
+    "lotNo": null,
+    "stockStatus": null,
     "quantity": 1
   },
   {
     "sku": "CAM-01",
+    "trackingMode": "SERIAL",
     "locationCode": "WH-ICN",
     "status": "IN_STOCK",
     "registered": false,
+    "lotNo": null,
+    "stockStatus": null,
     "quantity": 6
   }
 ]
@@ -296,7 +308,7 @@ curl -s $SCM/stock | jq -c '.[] | select(.status=="DOA")'
 - 접수 201, 확정 200 (as-api 응답은 [as-api.md](as-api.md)).
 - 가장 최근 요청: `{"id":"…","type":"DEACTIVATE","reason":"DOA_CONFIRMED","createdBy":"as-api","createdAt":"<시각>","notifiedAt":"<시각>","status":"COMPLETED","counts":{"total":1,"pending":0,"succeeded":1,"failed":0}}`.
   `/tmp/device-api.log` 에 `Received DEACTIVATE request …`, `deactivate REG-A-<RUN> (CAM-01) -> SUCCEEDED [...]`.
-- 개체는 `{"status":"DOA","registeredAt":"<그대로>","anomalies":[]}` — DOA 가 되어도 등록 사실은 남는다. 재고 `{"sku":"CAM-01","locationCode":null,"status":"DOA","registered":true,"quantity":1}`.
+- 개체는 `{"status":"DOA","registeredAt":"<그대로>","anomalies":[]}` — DOA 가 되어도 등록 사실은 남는다. 재고 `{"sku":"CAM-01","trackingMode":"SERIAL","locationCode":null,"status":"DOA","registered":true,"lotNo":null,"stockStatus":null,"quantity":1}`.
 
 ### 14. DOA 사실을 정정(무효화)해 다시 정상이 되면 REGISTER 요청이 다시 만들어진다
 
