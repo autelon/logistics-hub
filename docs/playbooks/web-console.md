@@ -40,7 +40,7 @@
 
 ### 3. 제품 추적 — 이상(anomaly) 표시와 없는 시리얼
 
-- `?sn=CAM-C-<RUN>` ([oms-api.md](oms-api.md) 14 이후): 머리 아래 노란 상자에 `⚠ 2026-09-12T00:00:00.000Z DELIVERED: IN_STOCK 상태에서 올 수 없는 사실` 한 줄.
+- `?sn=CAM-C-<RUN>` ([oms-api.md](oms-api.md) 14 이후): 머리 아래 노란 상자에 `⚠ 2026-09-12T00:00:00.000Z DELIVERED: IN_STOCK 상태에서 올 수 없는 사실` 한 줄. 머리에는 `거점` 이 없다 (`DELIVERED` 는 거점을 비운다).
 - `?sn=NOT-EXIST-<RUN>`: 본문에 `불러오지 못했습니다: Unit NOT-EXIST-<RUN> not found` 만 보인다.
 - `/` (sn 없음): `시리얼 번호로 제품 한 개의 제조부터 폐기까지 전체 이력을 조회합니다.` 안내문. 입력란에 시리얼을 넣고 `조회` 를 누르면 주소가 `/?sn=<입력>` 으로 바뀌고 이력이 뜬다.
 
@@ -50,10 +50,12 @@
 행은 `get $SCM/stock` 의 배열과 같은 순서·같은 값이고, 거점이 `null` 이면 `—` 로 보인다. 예 (이 DB 에 플레이북 데이터만 있을 때):
 
 ```
-CAM-01  —        DELIVERED  1     ← CAM-D (DOA 확정 전) 또는 그 DB 의 배송 완료 수
+CAM-01  —        DELIVERED  2     ← CAM-A (scm-api.md 22 뒤), CAM-C (oms-api.md 14: 출고 무효화 뒤 배송 완료만 남아도 거점은 비어 있다)
+CAM-01  —        DOA        1     ← CAM-D (oms-api.md 17 에서 DOA 확정)
 CAM-01  SVC-SEL  IN_STOCK   1     ← CAM-B
-CAM-01  WH-ICN   DELIVERED  1     ← CAM-C (출고 무효화 뒤 배송 완료만 남아 거점이 WH-ICN 인 채 DELIVERED)
 ```
+
+배송 완료·DOA 행의 거점이 `—` 이고, `WH-ICN` 행은 없다 (거점에 `DELIVERED` 가 남지 않는다).
 
 행이 없으면 `아직 데이터가 없습니다` 류의 빈 상태 문구가 보인다 (`QueryState`).
 
