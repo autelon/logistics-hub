@@ -341,7 +341,7 @@ sql "select count(*) as units from units; select count(*) as dispatched from uni
 관찰:
 
 ```
-{"serialNumber":"CAM-0001","status":"IN_TRANSIT","anomalies":["2026-10-01T00:00:00.000Z DISPATCHED: UNKNOWN 상태에서 올 수 없는 사실","2026-10-03T16:35:37.331Z DISPATCHED: IN_TRANSIT 상태에서 올 수 없는 사실"],"events":[{"type":"DISPATCHED","occurredAt":"2026-10-01T00:00:00.000Z","source":{"system":"acme-portal","ref":"PO-2026-000001-R1"}},{"type":"DISPATCHED","occurredAt":"2026-10-03T16:35:37.331Z","source":{"system":"acme-portal","ref":"UNLINKED-<id>"}}]}
+{"serialNumber":"CAM-0001","status":"IN_TRANSIT","anomalies":["2026-10-01T00:00:00.000Z DISPATCHED: UNKNOWN 상태에서 올 수 없는 사실","<시각> DISPATCHED: IN_TRANSIT 상태에서 올 수 없는 사실"],"events":[{"type":"DISPATCHED","occurredAt":"2026-10-01T00:00:00.000Z","source":{"system":"acme-portal","ref":"PO-2026-000001-R1"}},{"type":"DISPATCHED","occurredAt":"<시각>","source":{"system":"acme-portal","ref":"UNLINKED-<id>"}}]}
 {"serialNumber":"CAM-0005","status":"IN_TRANSIT","events":[{"type":"DISPATCHED","source":{"system":"acme-portal","ref":"UNLINKED-<id>"}}]}
 units
 7
@@ -464,7 +464,7 @@ get $SCM/units/CAM-0001 | head -1 | jq -c '{status, registered: (.registeredAt !
 
 ### 16. 동시 요청
 
-같은 키·같은 발주·같은 새 시리얼이 동시에 와도 500 이 나지 않는다. 진 요청은 처음부터 다시 해서 이긴 요청의 커밋을 본다(서버 로그에 `retrying`).
+같은 키·같은 발주·같은 새 시리얼이 동시에 와도 500 이 나지 않는다. 진 요청은 처음부터 다시 해서 이긴 요청의 커밋을 본다(서버 로그에 `lost a race` 경고).
 
 ```sh
 mk() { echo "{\"shipments\":[{\"poNumber\":\"$PO3\",\"blNumber\":\"$1\",\"shipper\":\"Other Ltd\",\"mode\":\"ROAD\",\"lines\":[{\"sku\":\"LENS-01\",\"quantity\":1}],\"source\":{\"system\":\"other-edi\"}${2:+,\"idempotencyKey\":\"$2\"}}]}"; }

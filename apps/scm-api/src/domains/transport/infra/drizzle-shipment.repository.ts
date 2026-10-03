@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 
 import { newId } from '@repo/db-kit/columns';
+import { isDuplicateKeyOn } from '@repo/db-kit/errors';
 import { CurrentDb } from '@repo/nest-kit/current-db';
 
 import type * as schema from '../../../db/schema.js';
@@ -44,26 +45,6 @@ const chunked = <T>(items: readonly T[]): T[][] => {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += CHUNK) chunks.push(items.slice(i, i + CHUNK));
   return chunks;
-};
-
-/** MySQL 의 `ER_DUP_ENTRY`. */
-const ER_DUP_ENTRY = 1062;
-
-/**
- * 이 에러가 `constraint`(고유 인덱스 이름) 하나를 어긴 것인가. Drizzle 은 드라이버 에러를 `cause` 에 감싸므로 사슬을 따라간다.
- * 다른 고유 인덱스를 어긴 것은 해당하지 않는다 (모르는 것을 중복으로 삼키지 않는다).
- */
-const isDuplicateKeyOn = (error: unknown, constraint: string): boolean => {
-  let current: unknown = error;
-  for (let depth = 0; depth < 5; depth += 1) {
-    if (typeof current !== 'object' || current === null) return false;
-    if (Reflect.get(current, 'errno') === ER_DUP_ENTRY) {
-      const message: unknown = Reflect.get(current, 'sqlMessage');
-      return typeof message === 'string' && message.endsWith(`${constraint}'`);
-    }
-    current = Reflect.get(current, 'cause');
-  }
-  return false;
 };
 
 @Injectable()
@@ -110,7 +91,7 @@ export class DrizzleShipmentRepository implements ShipmentRepository {
     try {
       for (const chunk of chunked(shipmentRows)) await db.insert(shipments).values(chunk);
     } catch (error) {
-      throw isDuplicateKeyOn(error, shipments.idempotencyKey.uniqueName ?? '')
+      throw isDuplicateKeyOn(error, shipments.idempotencyKey.uniqueName)
         ? new ShipmentConflict(error)
         : error;
     }

@@ -25,57 +25,10 @@ import {
 } from '../domains/transport/domain/shipment-plan.js';
 import type { Shipment } from '../domains/transport/domain/shipment.js';
 import { UnitService, type FactTarget } from '../domains/unit/application/unit.service.js';
+import { UnitConflict } from '../domains/unit/domain/unit-conflict.js';
 import type { Unit } from '../domains/unit/domain/unit.js';
 import { scmError } from '../errors.js';
-
-/** 처음 한 번을 포함한 시도 횟수. */
-const MAX_ATTEMPTS = 3;
-
-const ER_LOCK_DEADLOCK = 1213;
-const ER_DUP_ENTRY = 1062;
-/** `units.serial_number` 의 고유 인덱스 이름 (drizzle 이 붙이는 `<표>_<열>_unique`). */
-const UNIT_SERIAL_UNIQUE = 'units_serialNumber_unique';
-
-/** `cause` 사슬에서 MySQL 드라이버 에러(errno 가 있는 것)를 모두 꺼낸다. */
-const driverErrors = (error: unknown): { errno: unknown; message: unknown }[] => {
-  const found: { errno: unknown; message: unknown }[] = [];
-  let current: unknown = error;
-  for (let depth = 0; depth < 5 && typeof current === 'object' && current !== null; depth += 1) {
-    const errno: unknown = Reflect.get(current, 'errno');
-    if (errno !== undefined) found.push({ errno, message: Reflect.get(current, 'sqlMessage') });
-    current = Reflect.get(current, 'cause');
-  }
-  return found;
-};
-
-/**
- * 동시에 들어온 요청에게 져서 다시 해 볼 만한 실패인가: 같은 idempotencyKey 의 선적(`ShipmentConflict`),
- * 같은 새 시리얼을 동시에 만들다 난 고유 키 위반, 없는 시리얼의 잠금 틈에서 난 교착.
- * 진 트랜잭션은 롤백되어 있고 처음부터 다시 하면 이긴 쪽의 커밋이 보인다.
- * TODO: 같은 판별을 하는 db-kit 공용 함수(fix/concurrent-idempotency)가 main 에 들어오면 그것으로 바꾼다.
- */
-const isConcurrencyConflict = (error: unknown): boolean =>
-  error instanceof ShipmentConflict ||
-  driverErrors(error).some(
-    ({ errno, message }) =>
-      errno === ER_LOCK_DEADLOCK ||
-      (errno === ER_DUP_ENTRY &&
-        typeof message === 'string' &&
-        message.endsWith(`${UNIT_SERIAL_UNIQUE}'`)),
-  );
-
-const retryOnConflict = async <T>(attempt: () => Promise<T>, log: Logger): Promise<T> => {
-  for (let attempts = 1; ; attempts += 1) {
-    try {
-      return await attempt();
-    } catch (error) {
-      if (!isConcurrencyConflict(error) || attempts >= MAX_ATTEMPTS) throw error;
-      log.warn(
-        `Shipment intake lost a race with a concurrent request; retrying (attempt ${attempts + 1})`,
-      );
-    }
-  }
-};
+import { retryOnConflict } from './retry-on-conflict.js';
 
 const at = <T>(items: readonly T[], index: number): T => {
   const item = items[index];
@@ -150,10 +103,23 @@ export class IntakeShipmentsUsecase {
     const purchaseOrderIds = await this.purchaseOrders.idsOf(items.map((item) => item.poNumber));
 
     // 처음부터 다시 하는 단위는 트랜잭션을 여닫는 것까지다 (안에서 부르면 run 이 합류해 소용없다).
-    return retryOnConflict(
-      () => this.tx.run(() => this.record(items, products, [...purchaseOrderIds.values()])),
-      this.logger,
-    );
+    // 지는 경우는 둘이다: 같은 idempotencyKey 의 선적(`ShipmentConflict`)과, 같은 새 시리얼을 동시에 만들거나
+    // 없는 시리얼의 잠금 틈에서 교착이 난 제품 저장(`UnitConflict`). 둘 다 처음부터 다시 하면 이긴 쪽의 커밋이 보인다.
+    const attempt = async () => {
+      try {
+        return await this.tx.run(() =>
+          this.record(items, products, [...purchaseOrderIds.values()]),
+        );
+      } catch (error) {
+        if (error instanceof ShipmentConflict || error instanceof UnitConflict) {
+          this.logger.warn(
+            `Shipment intake lost a race with a concurrent request: ${error.message}`,
+          );
+        }
+        throw error;
+      }
+    };
+    return retryOnConflict(UnitConflict, () => retryOnConflict(ShipmentConflict, attempt));
   }
 
   private async record(

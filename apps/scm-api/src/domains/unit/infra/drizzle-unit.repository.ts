@@ -305,8 +305,12 @@ export class DrizzleUnitRepository implements UnitRepository {
     const rows = newUnits.map(({ orderRef, ...columns }): UnitRow => {
       return { ...columns, id: newId(), ...orderColumns(orderRef) };
     });
-    for (const chunk of chunked(rows)) {
-      await this.db.get().insert(units).values(chunk);
+    try {
+      for (const chunk of chunked(rows)) {
+        await this.db.get().insert(units).values(chunk);
+      }
+    } catch (error) {
+      throw unitInsertFailure(error);
     }
     return rows.map(toUnit);
   }
