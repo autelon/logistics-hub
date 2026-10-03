@@ -81,6 +81,22 @@ git 은 작성자(author)와 커밋한 사람(committer)을 따로 기록한다.
 
 이 설정은 GitHub 저장소 설정(Rulesets, 병합 방식, 머지 큐)에만 있다. 값의 원본은 조직 공용 저장소 `autelon/.github` 의 `rulesets/main.json` 과 `scripts/setup-repo.sh` 이고, 이 저장소는 그 표준을 그대로 따른다(필수 검사: `check`, `git-policy / merge-commits`). 현재 값은 `gh api repos/autelon/logistics-hub/rulesets` 로 확인한다.
 
+## PR 리뷰어와 보안 검토
+
+이 프로젝트는 autelon 플러그인으로 운영한다(`CLAUDE.md` "autelon 운영"). 리뷰어와 보안 검토는 다음과 같다.
+
+리뷰어: **`reviewer role`** (`.claude/agents/reviewer.md`)
+
+- 메인 에이전트(director)가 PR 이 올라오면 `reviewer` role 에 검토를 맡긴다. 검토 기준은 `docs/agent-workflow.md` 의 "검토 기준"이다.
+- reviewer 는 판정을 head sha 와 함께 PR 코멘트로 남긴다: `리뷰: 통과 (<sha>)` 또는 `리뷰: 수정 필요 (<sha>)`. 계정이 하나라 GitHub 승인(approve)은 쓰지 않는다.
+- 리뷰어를 바꾸려면 이 절과 `docs/agent-workflow.md` 를 고치고 `decisions/log.md` 에 남긴다.
+
+**보안 검토 (항상)**: 리뷰어가 누구든 모든 PR 은 `autelon:security-reviewer` 가 보안 검토를 한다. 개인 경로, Notion 주소·ID, 비밀 값, 개인 정보, 위험한 CI·의존성 변경을 본다.
+판정은 PR 코멘트 `보안 검토: 통과 (<sha>)` 또는 `보안 검토: 수정 필요 (<sha>)` 로 남는다. 이 규칙은 리뷰어를 바꿔도 바뀌지 않는다.
+
+**머지 조건**: 같은 head sha 에 `리뷰: 통과` 코멘트와 `보안 검토: 통과 (<sha>)` 코멘트가 둘 다 있어야 한다. 하나라도 없으면 머지 명령을 내지 않는다.
+머지 명령은 reviewer 가 낸다: `gh pr merge <PR> --match-head-commit <리뷰한 head sha>` (`--admin` 은 쓰지 않는다). 리뷰나 보안 검토 뒤에 브랜치가 바뀌면 새 head 로 둘 다 다시 받는다.
+
 ## 히스토리 조사
 
 코드를 바꾸기 전에, 그 코드가 왜 그 모양인지부터 확인한다.
