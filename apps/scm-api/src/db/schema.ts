@@ -26,11 +26,13 @@ import type {
   UnitReceiptTrigger,
   UnitStatus,
 } from '@repo/contracts/scm';
+import type { ShipmentMode } from '@repo/contracts/transport';
 import { idColumn, utcDateTime } from '@repo/db-kit/columns';
 import { outboxEvents } from '@repo/db-kit/outbox';
 import { publicIdColumn, publicIdCounters } from '@repo/db-kit/public-id';
 
 import type { PurchaseOrderSnapshot } from '../domains/procurement/domain/purchase-order.js';
+import type { ShipmentAnomaly, ShipmentLink } from '../domains/transport/domain/shipment.js';
 
 export { outboxEvents, publicIdCounters };
 
@@ -315,4 +317,103 @@ export const purchaseOrderRevisions = mysqlTable(
     after: json().$type<PurchaseOrderSnapshot>().notNull(),
   },
   (t) => [index('purchase_order_revisions_po_idx').on(t.purchaseOrderId, t.revisedAt)],
+);
+
+/**
+ * 제조사·포워더가 알려 준 한 번의 출하 (B/L·시리얼 목록 제출 한 건). 보고된 사실이라 추가만 하고, 수정·삭제를 제공하지 않는다.
+ * 보고된 값(reported_po_number, bl_number, 날짜, 줄, 시리얼)은 바뀌지 않는다. 우리가 해석한 값 — purchase_order_id,
+ * shipment_no, 줄의 purchase_order_line_id — 만 운영자의 연결 명령(shipment_links)이 한 번 채운다.
+ * purchase_order_id 가 null 이면 발주에 연결되지 않은 선적이고 shipment_no 는 `UNLINKED-…`, 연결되면 `<발주 번호>-R<n>` 이다.
+ */
+export const shipments = mysqlTable(
+  'shipments',
+  {
+    id: idColumn().primaryKey(),
+    shipmentNo: varchar({ length: 64 }).notNull().unique(),
+    purchaseOrderId: idColumn().references(() => purchaseOrders.id),
+    /** 제출된 발주 번호 그대로. 모르는 번호여도 기록한다. */
+    reportedPoNumber: varchar({ length: 100 }).notNull(),
+    blNumber: varchar({ length: 100 }).notNull(),
+    invoiceNumber: varchar({ length: 100 }),
+    shipper: varchar({ length: 200 }).notNull(),
+    mode: varchar({ length: 8 }).$type<ShipmentMode>().notNull(),
+    /** 달력 날짜(`YYYY-MM-DD`). 발주의 날짜와 같이 시각이 아니다. */
+    shipDate: date({ mode: 'string' }),
+    eta: date({ mode: 'string' }),
+    sourceSystem: varchar({ length: 100 }).notNull(),
+    sourceRef: varchar({ length: 200 }),
+    idempotencyKey: varchar({ length: 200 }).unique(),
+    /** 업체가 보고한 시각. */
+    reportedAt: utcDateTime().notNull(),
+    /** 우리가 기록한 시각. 차수는 이 순서로 매긴다. */
+    recordedAt: utcDateTime().notNull(),
+    note: varchar({ length: 500 }),
+    /** 받을 때 찾은 이상. 바뀌지 않는다. 연결로 해소된 것은 읽을 때 걸러 낸다. */
+    anomalies: json().$type<ShipmentAnomaly[]>().notNull(),
+  },
+  (t) => [index('shipments_po_idx').on(t.purchaseOrderId)],
+);
+
+export const shipmentLines = mysqlTable(
+  'shipment_lines',
+  {
+    id: idColumn().primaryKey(),
+    shipmentId: idColumn()
+      .notNull()
+      .references(() => shipments.id),
+    /** 1부터. 제출한 순서. */
+    lineNo: int().notNull(),
+    /** 맞춘 발주 줄. 받을 때 맞지 않았거나 발주에 연결되지 않았으면 null 이고, 연결 명령이 채운다. */
+    purchaseOrderLineId: idColumn().references(() => purchaseOrderLines.id),
+    productId: idColumn()
+      .notNull()
+      .references(() => products.id),
+    shippedQty: int().notNull(),
+    lotNo: varchar({ length: 100 }),
+  },
+  (t) => [
+    unique('shipment_lines_shipment_line_uq').on(t.shipmentId, t.lineNo),
+    index('shipment_lines_po_line_idx').on(t.purchaseOrderLineId),
+    check('shipment_lines_qty_chk', sql`${t.shippedQty} > 0`),
+  ],
+);
+
+/** 선적 줄의 시리얼 목록. 입고 검수 때 대조하는 기준이다. */
+export const shipmentLineSerials = mysqlTable(
+  'shipment_line_serials',
+  {
+    id: idColumn().primaryKey(),
+    shipmentLineId: idColumn()
+      .notNull()
+      .references(() => shipmentLines.id),
+    serialNumber: varchar({ length: 100 }).notNull(),
+  },
+  (t) => [
+    unique('shipment_line_serials_line_serial_uq').on(t.shipmentLineId, t.serialNumber),
+    index('shipment_line_serials_serial_idx').on(t.serialNumber),
+  ],
+);
+
+/** 운영자가 발주에 연결하지 않은 선적을 발주에 연결한 기록. 추가만 하고 선적 하나에 하나뿐이다. */
+export const shipmentLinks = mysqlTable(
+  'shipment_links',
+  {
+    id: idColumn().primaryKey(),
+    shipmentId: idColumn()
+      .notNull()
+      .unique()
+      .references(() => shipments.id),
+    purchaseOrderId: idColumn()
+      .notNull()
+      .references(() => purchaseOrders.id),
+    /** 연결 전 번호(`UNLINKED-…`). 이 번호로도 선적을 찾을 수 있다 (제품 이력의 출처 참조에 남아 있다). */
+    previousShipmentNo: varchar({ length: 64 }).notNull().unique(),
+    shipmentNo: varchar({ length: 64 }).notNull(),
+    actor: varchar({ length: 100 }).notNull(),
+    reason: varchar({ length: 500 }).notNull(),
+    linkedAt: utcDateTime().notNull(),
+    lineLinks: json().$type<ShipmentLink['lineLinks']>().notNull(),
+    anomalies: json().$type<ShipmentAnomaly[]>().notNull(),
+  },
+  (t) => [index('shipment_links_po_idx').on(t.purchaseOrderId)],
 );
