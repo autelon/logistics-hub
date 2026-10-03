@@ -99,6 +99,6 @@ export type NewShipmentLink = Omit<ShipmentLink, 'id'>;
 
 /** 목록 조회 조건. 둘 다 주면 둘 다 만족하는 것만 찾는다. */
 export interface ShipmentFilter {
-  purchaseOrderId?: string;
-  unlinkedOnly?: boolean;
+  purchaseOrderId?: string | undefined;
+  unlinkedOnly?: boolean | undefined;
 }

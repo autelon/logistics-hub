@@ -6,6 +6,7 @@ import { UsecasesModule } from '../../usecases/usecases.module.js';
 import { CatalogController } from './catalog.controller.js';
 import { DeviceRequestsController } from './device-requests.controller.js';
 import { PurchaseOrdersController } from './purchase-orders.controller.js';
+import { ShipmentsController } from './shipments.controller.js';
 import { StockMovementsController } from './stock-movements.controller.js';
 import { UnitRegistrationsController } from './unit-registrations.controller.js';
 import { UnitsController } from './units.controller.js';
@@ -20,6 +21,7 @@ import { UnitsController } from './units.controller.js';
     DeviceRequestsController,
     StockMovementsController,
     PurchaseOrdersController,
+    ShipmentsController,
   ],
 })
 export class ApiModule {}
