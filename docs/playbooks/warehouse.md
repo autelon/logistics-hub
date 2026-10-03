@@ -284,3 +284,31 @@ stock
 ```
 
 `trackingMode` 는 행의 근거를 뜻한다: 개체(`unit_events`)로 센 행은 `SERIAL`, 원장으로 합산한 행은 제품의 추적 방식이다.
+
+## 동시 중복 키
+
+### 15. 같은 idempotencyKey 의 요청이 동시에 와도 하나만 기록되고 나머지는 중복이다
+
+한 항목짜리와 세 항목짜리를 각각 5개 동시에 보낸다.
+
+```sh
+conc() { seq 5 | xargs -P5 -I{} sh -c 'echo "$(curl -s -w " → %{http_code}" -X POST "$0" -H "content-type: application/json" -d "$1")"' "$1" "$2" | sort; }
+M() { echo "{\"sku\":\"$N\",\"toLocationCode\":\"$A\",\"quantity\":3,\"reason\":\"GOODS_RECEIPT\",$SRC,\"idempotencyKey\":\"$1-$RUN\"}"; }
+echo "# 한 항목"; conc $SCM/stock-movements "{\"movements\":[$(M c1)]}"
+echo "# 세 항목"; conc $SCM/stock-movements "{\"movements\":[$(M d1),$(M d2),$(M d3)]}"
+docker-compose -p logistics-hub exec -T mysql mysql -uroot -proot $DB -N -e "select idempotency_key, count(*) from stock_movements where idempotency_key in ('c1-$RUN','d1-$RUN','d2-$RUN','d3-$RUN') group by idempotency_key"
+```
+
+기대: 두 묶음 모두 5개가 `→ 201` 이고 `500` 은 없다. 한 항목은 `duplicate` `false` 하나와 `true` 넷이고 `movementId` 는 모두 같다.
+세 항목은 응답 하나가 `[false, false, false]`, 나머지 넷이 `[true, true, true]` 이며 항목마다 `movementId` 는 다섯 응답에서 같다.
+DB 는 키마다 1행 (`c1` `d1` `d2` `d3` 각각 `1`).
+
+```text
+{"movements":[{"movementId":"<X>","duplicate":false}]} → 201
+{"movements":[{"movementId":"<같은 X>","duplicate":true}]} → 201   (× 4)
+```
+
+- 진 쪽은 `stock_movements` 의 idempotency_key 고유 키 위반(MySQL 1062)으로 INSERT 가 실패하고 트랜잭션이 통째로 롤백된다.
+- usecase 가 요청 전체를 처음부터 다시 한다. 이긴 쪽이 이미 커밋했으므로 다시 할 때는 그 키들이 저장된 것으로 보여 중복으로 돌아온다.
+- 다른 고유 키 위반은 삼키지 않는다: 12 의 동시 정정(`reverses_movement_id` 고유 키)은 여전히 `201` 하나와 `409` 다섯이다.
+- 고치기 전에는 한 항목, 세 항목 모두 하나만 `201`, 나머지 넷은 `500 {"code":"INTERNAL_ERROR"}` 였다.

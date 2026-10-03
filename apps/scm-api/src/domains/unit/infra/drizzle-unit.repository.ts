@@ -3,6 +3,7 @@ import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import type { OrderRef } from '@repo/contracts/common';
 import { newId } from '@repo/db-kit/columns';
+import { isDeadlock, isDuplicateKeyOn } from '@repo/db-kit/errors';
 import { CurrentDb } from '@repo/nest-kit/current-db';
 
 import type * as schema from '../../../db/schema.js';
@@ -13,6 +14,7 @@ import {
   unitEvents,
   units,
 } from '../../../db/schema.js';
+import { UnitConflict } from '../domain/unit-conflict.js';
 import type { UnitState } from '../domain/unit-projection.js';
 import type {
   StockCount,
@@ -56,6 +58,24 @@ const toEvent = ({
 });
 
 const toCorrection = (row: CorrectionRow): UnitEventCorrection => row;
+
+/**
+ * 시리얼 INSERT 가 같은 시리얼의 첫 보고와 동시에 처리되다 진 것을 알아본다: 시리얼의 고유 키 위반이나 그 틈에서 난 교착.
+ * 그 밖의 에러(다른 고유 키 위반 포함)는 그대로 돌려준다.
+ */
+const unitInsertFailure = (error: unknown): unknown => {
+  if (isDuplicateKeyOn(error, units.serialNumber.uniqueName)) {
+    return new UnitConflict('serialNumber', error);
+  }
+  if (isDeadlock(error)) return new UnitConflict('deadlock', error);
+  return error;
+};
+
+/** 사실 INSERT 가 같은 idempotencyKey 의 보고와 동시에 처리되다 진 것을 알아본다. 다른 고유 키 위반은 그대로 돌려준다. */
+const eventInsertFailure = (error: unknown): unknown =>
+  isDuplicateKeyOn(error, unitEvents.idempotencyKey.uniqueName)
+    ? new UnitConflict('idempotencyKey', error)
+    : error;
 
 /** IN 절과 다중 행 INSERT 의 한 번 크기. 너무 크면 패킷·플랜이 부담스러워진다. */
 const CHUNK = 500;
@@ -121,7 +141,11 @@ export class DrizzleUnitRepository implements UnitRepository {
   async createUnit(unit: Omit<Unit, 'id'>): Promise<Unit> {
     const { orderRef, ...columns } = unit;
     const row: UnitRow = { ...columns, id: newId(), ...orderColumns(orderRef) };
-    await this.db.get().insert(units).values(row);
+    try {
+      await this.db.get().insert(units).values(row);
+    } catch (error) {
+      throw unitInsertFailure(error);
+    }
     return toUnit(row);
   }
 
@@ -142,7 +166,11 @@ export class DrizzleUnitRepository implements UnitRepository {
 
   async addEvent(event: Omit<UnitEvent, 'id'>): Promise<UnitEvent> {
     const row = eventRow(event);
-    await this.db.get().insert(unitEvents).values(row);
+    try {
+      await this.db.get().insert(unitEvents).values(row);
+    } catch (error) {
+      throw eventInsertFailure(error);
+    }
     return toEvent(row);
   }
 

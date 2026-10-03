@@ -2,10 +2,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import { asc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 
 import { newId } from '@repo/db-kit/columns';
+import { isDuplicateKeyOn } from '@repo/db-kit/errors';
 import { CurrentDb } from '@repo/nest-kit/current-db';
 
 import type * as schema from '../../../db/schema.js';
 import { locations, products, stockMovements } from '../../../db/schema.js';
+import { StockMovementConflict } from '../domain/stock-movement-conflict.js';
 import type { NewStockMovement, StockBalance, StockMovement } from '../domain/stock-movement.js';
 import type { StockMovementRepository } from '../domain/stock-movement.repository.js';
 
@@ -37,7 +39,15 @@ export class DrizzleStockMovementRepository implements StockMovementRepository {
   async insertAll(movements: readonly NewStockMovement[]): Promise<StockMovement[]> {
     const rows = movements.map(toRow);
     for (const chunk of chunked(rows)) {
-      await this.db.get().insert(stockMovements).values(chunk);
+      try {
+        await this.db.get().insert(stockMovements).values(chunk);
+      } catch (error) {
+        // idempotencyKey 만 알아본다. 되돌린 이동(reversesMovementId)의 고유 키 위반 같은 것은 그대로 던진다.
+        if (isDuplicateKeyOn(error, stockMovements.idempotencyKey.uniqueName)) {
+          throw new StockMovementConflict(error);
+        }
+        throw error;
+      }
     }
     return rows.map(toMovement);
   }

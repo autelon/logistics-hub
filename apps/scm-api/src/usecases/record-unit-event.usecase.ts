@@ -6,8 +6,10 @@ import { TransactionRunner } from '@repo/nest-kit/transaction-runner';
 import { CatalogService } from '../domains/catalog/application/catalog.service.js';
 import { DeviceRequestService } from '../domains/device-request/application/device-request.service.js';
 import { UnitService } from '../domains/unit/application/unit.service.js';
+import { UnitConflict } from '../domains/unit/domain/unit-conflict.js';
 import type { ProductRef, Unit } from '../domains/unit/domain/unit.js';
 import { scmError } from '../errors.js';
+import { retryOnConflict } from './retry-on-conflict.js';
 
 export interface RecordUnitEventResult {
   eventId: string;
@@ -30,6 +32,13 @@ export class RecordUnitEventUsecase {
   ) {}
 
   execute(request: RecordUnitEventRequest): Promise<RecordUnitEventResult> {
+    // 같은 시리얼의 첫 보고나 같은 idempotencyKey 의 보고가 동시에 오면 진 쪽은 저장에서 `UnitConflict` 로 실패한다.
+    // 롤백된 뒤 처음부터 다시 하면 이긴 쪽의 시리얼은 잠그고, 이긴 쪽의 키는 중복으로 알아본다.
+    // 교착은 다시 하는 쪽끼리 되풀이될 수 있어 시도는 `MAX_ATTEMPTS` 번까지 한다.
+    return retryOnConflict(UnitConflict, () => this.attempt(request));
+  }
+
+  private attempt(request: RecordUnitEventRequest): Promise<RecordUnitEventResult> {
     return this.tx.run(async () => {
       const duplicate = await this.units.findDuplicate(request.idempotencyKey);
       if (duplicate) return { eventId: duplicate.id, duplicate: true };
