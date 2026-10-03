@@ -14,5 +14,6 @@
 | [doa-replacement-refund.md](doa-replacement-refund.md)                                 | DOA 의 교체/환불 결정을 SAP·Dynamics·NetSuite 가 어디서 누가 하는지, 국내 소비자분쟁해결기준                                                                                                     |
 | [reverse-logistics-routing.md](reverse-logistics-routing.md)                           | 역흐름의 물리 경로: 표준 단계(SCOR, GS1 CBV), SAP·Dynamics·Oracle 의 경로와 구간 시작 문서, 국내 택배 반품 회수·3PL 반품 입고, 가전 DOA·RTV·리퍼, 파트너가 보고하는 사실                         |
 | [shipment-rounds-and-receiving-units.md](shipment-rounds-and-receiving-units.md)       | 발주의 계획 차수·입고 단위·물리 선적의 계층(SAP EKET/LIKP/VTTK, Dynamics load, NetSuite inbound shipment), 입고 단위를 쪼개는 이유(분할 도착, B/L 분할 통관), 계획 차수 없이 온 선적 통지의 처리 |
+| [planned-rounds-purpose.md](planned-rounds-purpose.md)                                 | 발주 계획 차수(SAP 일정행, D365 delivery schedule)의 용도와 "선적 전에 있어야 하는가", 계획 없이/의무 생성 시 문제, UCP 600 분할 선적(제31·32조), 통관 단위(B/L)                                 |
 
 설계에 반영한 결론은 [../06-inbound-design.md](../06-inbound-design.md) 에 있고, 사용자 확인이 남은 항목도 거기에 있다.
