@@ -8,6 +8,7 @@ import {
   httpConfig,
   logConfig,
   messagingConfig,
+  sharedConfigsOf,
   validateEnv,
 } from './config.js';
 
@@ -68,6 +69,26 @@ describe('validateEnv', () => {
 
   it('빈 REDIS_URL 은 없는 것으로 본다', () => {
     expect(problemsOf(() => validate({ REDIS_URL: '' }))).toEqual([]);
+  });
+});
+
+describe('DB 없는 서비스', () => {
+  const noDb = { PORT: 3004 };
+
+  it('DATABASE_URL 기본값이 없으면 http 와 log 만 공용으로 읽는다', () => {
+    expect(sharedConfigsOf(noDb)).toEqual([httpConfig, logConfig]);
+    expect(sharedConfigsOf(defaults)).toEqual([
+      httpConfig,
+      databaseConfig,
+      messagingConfig,
+      logConfig,
+    ]);
+  });
+
+  it('DATABASE_URL 이 없어도 검증을 통과하고 기본 PORT 만 채운다', () => {
+    const validateNoDb = validateEnv(sharedConfigsOf(noDb), noDb);
+    expect(validateNoDb({})).toEqual({ PORT: '3004' });
+    expect(problemsOf(() => validateNoDb({ PORT: 'abc', LOG_LEVEL: 'loud' }))).toHaveLength(2);
   });
 });
 
