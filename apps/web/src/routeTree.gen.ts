@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as StockRouteImport } from './routes/stock'
+import { Route as PurchaseOrdersIndexRouteImport } from './routes/purchase-orders.index'
+import { Route as PurchaseOrdersPoNumberRouteImport } from './routes/purchase-orders.$poNumber'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +36,32 @@ const StockRoute = StockRouteImport.update({
   path: '/stock',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PurchaseOrdersIndexRoute = PurchaseOrdersIndexRouteImport.update({
+  id: '/purchase-orders/',
+  path: '/purchase-orders/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PurchaseOrdersPoNumberRoute = PurchaseOrdersPoNumberRouteImport.update({
+  id: '/purchase-orders/$poNumber',
+  path: '/purchase-orders/$poNumber',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/orders': typeof OrdersRoute
   '/register': typeof RegisterRoute
   '/stock': typeof StockRoute
+  '/purchase-orders/$poNumber': typeof PurchaseOrdersPoNumberRoute
+  '/purchase-orders/': typeof PurchaseOrdersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/orders': typeof OrdersRoute
   '/register': typeof RegisterRoute
   '/stock': typeof StockRoute
+  '/purchase-orders/$poNumber': typeof PurchaseOrdersPoNumberRoute
+  '/purchase-orders': typeof PurchaseOrdersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +69,34 @@ export interface FileRoutesById {
   '/orders': typeof OrdersRoute
   '/register': typeof RegisterRoute
   '/stock': typeof StockRoute
+  '/purchase-orders/$poNumber': typeof PurchaseOrdersPoNumberRoute
+  '/purchase-orders/': typeof PurchaseOrdersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/orders' | '/register' | '/stock'
+  fullPaths:
+    | '/'
+    | '/orders'
+    | '/register'
+    | '/stock'
+    | '/purchase-orders/$poNumber'
+    | '/purchase-orders/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/orders' | '/register' | '/stock'
-  id: '__root__' | '/' | '/orders' | '/register' | '/stock'
+  to:
+    | '/'
+    | '/orders'
+    | '/register'
+    | '/stock'
+    | '/purchase-orders/$poNumber'
+    | '/purchase-orders'
+  id:
+    | '__root__'
+    | '/'
+    | '/orders'
+    | '/register'
+    | '/stock'
+    | '/purchase-orders/$poNumber'
+    | '/purchase-orders/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +104,8 @@ export interface RootRouteChildren {
   OrdersRoute: typeof OrdersRoute
   RegisterRoute: typeof RegisterRoute
   StockRoute: typeof StockRoute
+  PurchaseOrdersPoNumberRoute: typeof PurchaseOrdersPoNumberRoute
+  PurchaseOrdersIndexRoute: typeof PurchaseOrdersIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +138,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StockRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/purchase-orders/': {
+      id: '/purchase-orders/'
+      path: '/purchase-orders'
+      fullPath: '/purchase-orders/'
+      preLoaderRoute: typeof PurchaseOrdersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/purchase-orders/$poNumber': {
+      id: '/purchase-orders/$poNumber'
+      path: '/purchase-orders/$poNumber'
+      fullPath: '/purchase-orders/$poNumber'
+      preLoaderRoute: typeof PurchaseOrdersPoNumberRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +160,8 @@ const rootRouteChildren: RootRouteChildren = {
   OrdersRoute: OrdersRoute,
   RegisterRoute: RegisterRoute,
   StockRoute: StockRoute,
+  PurchaseOrdersPoNumberRoute: PurchaseOrdersPoNumberRoute,
+  PurchaseOrdersIndexRoute: PurchaseOrdersIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
