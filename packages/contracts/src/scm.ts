@@ -127,6 +127,9 @@ export const ScmErrorCode = z.enum([
   'PO_LINE_CANCELLED', // 취소한 줄은 바꾸거나 닫을 수 없음
   'PO_LINE_ALREADY_COMPLETE', // 이미 다 받은(또는 과납인) 줄은 닫을 수 없음. 닫기는 미달 납품용
   'PO_QTY_BELOW_RECEIVED', // 주문 수량(또는 줄 취소)이 이미 받은 수량 아래로 내려감. details 에 줄 번호와 받은 수량
+  'SHIPMENT_NOT_FOUND',
+  'SHIPMENT_ALREADY_LINKED', // 이미 발주에 연결된 선적은 다시 연결할 수 없음
+  'SHIPMENT_LINES_UNMATCHED', // 연결하려는 발주에 같은 SKU 의 줄이 없는 선적 줄이 있음. details 에 줄 번호와 SKU
 ]);
 export type ScmErrorCode = z.infer<typeof ScmErrorCode>;
 
