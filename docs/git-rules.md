@@ -70,13 +70,16 @@ git 은 작성자(author)와 커밋한 사람(committer)을 따로 기록한다.
   - 그래서 **브랜치의 커밋 하나하나가 위의 커밋 규칙을 지켜야 한다.** "wip", "fix typo" 같은 커밋은 올리기 전에 정리한다 (`git rebase -i`, `git commit --amend`).
   - PR 제목과 본문이 merge commit 의 메시지가 된다. 제목은 커밋 제목 규칙을, 본문은 템플릿(`.github/pull_request_template.md`)을 따른다.
     PR 이 커밋 하나짜리면 그 커밋 메시지를 그대로 쓰면 된다. 여러 개면 본문은 PR 전체의 왜·결정·검증을 요약한다.
-- **CI 의 `check` 가 통과해야 병합된다.** `pnpm check` 와 PR 안 모든 커밋의 메시지 형식을 검사한다. 브랜치가 main 보다 뒤처져 있으면 먼저 최신화해야 한다.
-- 자동 병합을 쓸 수 있다: `gh pr merge --auto --merge`. check 가 통과하는 순간 병합된다.
+- **CI 의 `check` 와 `git-policy / merge-commits` 가 통과해야 병합된다.** `check` 는 `pnpm check` 와 PR 안 모든 커밋의 메시지 형식을, `git-policy` 는 PR 에 merge 커밋이 없는지를 검사한다.
+- **병합은 머지 큐로 한다.** 큐가 최신 main(과 큐에서 앞선 PR)에 이 PR 을 합친 임시 브랜치에서 필수 검사를 다시 돌리고, 통과하면 main 에 넣는다. 그래서 브랜치를 미리 최신화하지 않아도 된다.
+- **작업 브랜치는 rebase 로만 최신화한다.** main 을 브랜치로 merge 하면 `git-policy` 가 실패한다. 충돌이 나서 큐에서 빠지면 rebase 해서 다시 올린다:
+  `git fetch origin && git rebase origin/main && git push --force-with-lease` (`--force` 는 쓰지 않는다).
+- 병합 명령은 PR 을 올린 쪽이 아니라 리뷰한 쪽이 낸다 (`docs/agent-workflow.md`).
 - PR 하나에 논리적 주제 하나. 커지면 나눈다.
 - 본문의 안내 주석(`<!-- -->`)은 지우고 올린다. 해당 없는 항목은 항목째 지운다.
 - 리뷰에서 나온 **결정**은 PR 본문이나 커밋 메시지에 반영한다. 댓글 스레드는 히스토리에 남지 않는다.
 
-이 설정은 GitHub 저장소 설정(Rulesets, 병합 방식)에만 있고 리포에는 파일로 두지 않는다. 현재 값은 `gh api repos/{owner}/{repo}/rulesets` 로 확인한다.
+이 설정은 GitHub 저장소 설정(Rulesets, 병합 방식, 머지 큐)에만 있다. 값의 원본은 조직 공용 저장소 `autelon/.github` 의 `rulesets/main.json` 과 `scripts/setup-repo.sh` 이고, 이 저장소는 그 표준을 그대로 따른다(필수 검사: `check`, `git-policy / merge-commits`). 현재 값은 `gh api repos/autelon/logistics-hub/rulesets` 로 확인한다.
 
 ## 히스토리 조사
 
