@@ -38,6 +38,7 @@
 | `SCRAPPED`        | 폐기           | `DOA`, `RETURNED`, `IN_STOCK`      | `SCRAPPED`            |
 
 표의 "올 수 있는 상태"가 아닌 곳에서 사실이 오면 **반영은 하되 이상으로 표시**한다.
+`DISPATCHED`·`SHIPPED`·`DELIVERED`·`SCRAPPED` 는 거점을 비운다. 특히 `DELIVERED` 는 제품이 고객 손에 있다는 뜻이라, 출고가 무효화되어 입고 뒤 배송 완료만 남아도 위치는 비고 재고에는 거점 없이 `DELIVERED` 로 잡힌다. 이후 `RETURN_RECEIVED` 가 오면 회수 거점이 다시 위치가 된다.
 규칙은 [unit-projection.ts](../apps/scm-api/src/units/unit-projection.ts) 한 파일에 있고 순수 함수라 DB 없이 테스트한다.
 
 ### 두 개의 시간

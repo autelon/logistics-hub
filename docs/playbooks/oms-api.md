@@ -198,7 +198,7 @@ get $SCM/units/CAM-C-$RUN
 ```
 
 기대: OMS 항목이 `"status":"PENDING","serialNumber":null,"shippedAt":null,"deliveredAt":null`.
-SCM 쪽 제품은 `status` `DELIVERED`, `anomalies` `["2026-09-12T00:00:00.000Z DELIVERED: IN_STOCK 상태에서 올 수 없는 사실"]` (배송 완료 사실은 여전히 유효하다. 바로잡으려면 그것도 정정해야 한다).
+SCM 쪽 제품은 `status` `DELIVERED`, `locationCode` `null` (배송 완료는 거점을 비우므로 입고 거점 WH-ICN 이 남지 않는다), `orderRef` `null`, `anomalies` `["2026-09-12T00:00:00.000Z DELIVERED: IN_STOCK 상태에서 올 수 없는 사실"]` (배송 완료 사실은 여전히 유효하다. 바로잡으려면 그것도 정정해야 한다).
 
 ### 15. 다른 제품으로 제대로 출고·배송
 
