@@ -8,3 +8,7 @@ dist
 coverage
 .DS_Store
 .claude/worktrees/
+# autelon: 개인 리소스 매핑(Notion ID 등)과 사용량 스냅샷은 로컬에만 둔다
+notion/
+local/
+state/quota.json
