@@ -87,3 +87,42 @@
 
 도메인 동작이나 구조를 바꾸면 해당 문서도 같이 고친다.
 `README.md` 만 사람이 읽는 문서라 영어로 쓴다. 나머지 문서·주석·커밋은 한국어다.
+
+## autelon 운영
+
+이 프로젝트는 autelon 플러그인(`.claude/settings.json` 의 `enabledPlugins`)으로 운영한다. 2026-10-04 에 도입했고 결정은 `decisions/log.md` 에 있다.
+
+**지금은 혼합 방식이다.**
+
+- **기획·조사·결정**은 director 방식이다. 세션을 시작하면 `autelon:director` 스킬을 불러 그 규칙(board, PRD, handoff, 사람 승인, 재무 규칙, Notion 동기화)대로 한다. 도메인 판단은 `.claude/agents/` 의 전문가 role 에 맡기고 결과를 사람에게 승인받는다.
+- **코드 구현·PR 검토·병합**은 `docs/agent-workflow.md` 그대로다. 구현은 `developer` role 이 worktree 에서, 검토와 머지 명령은 `reviewer` role 이, 보안 검토는 `autelon:security-reviewer` 가 한다(`docs/git-rules.md` "PR 리뷰어와 보안 검토"). 코드 PR 은 사람이 하나씩 승인하지 않는다.
+- director 규칙과 다르게 두는 것: 메인 에이전트(director)는 지금처럼 `CLAUDE.md`·`docs/` 를 직접 고칠 수 있다(`docs/agent-workflow.md` 의 예외). 사람 승인은 기획 산출물(PRD, 전문가 role 의 결론, 06 의 미결 항목에 대한 답)에만 받는다.
+- 다음 단계(코드 작업도 board task·handoff 승인으로 옮길지)는 PRD 몇 건을 이 방식으로 운영한 뒤 사용자가 정한다.
+- 기존 원칙이 우선한다: 근거 없이 정하지 않는다(`docs/agent-workflow.md` "근거 없이 결정하지 않는다"). 기존 문서의 결정을 role 이 뒤집지 않는다. 바꿔야 하면 사람에게 묻는다.
+
+**role** (`.claude/agents/`)
+
+| 구분        | role                                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 전략·구조   | `strategist`(목표·지표, 모듈형 제품의 사업 측면), `architect`(서비스 경계·규격, 모듈형 제품의 기술 측면)                                                      |
+| 도메인 전문 | `procurement-expert`, `transport-expert`, `customs-trade-expert`, `warehouse-expert`, `reverse-logistics-expert`, `traceability-expert`, `fulfillment-expert` |
+| 제품·개발   | `po`, `developer`, `reviewer`, `designer`, `da`                                                                                                               |
+| 공용        | `autelon:security-reviewer`(모든 PR), `autelon:finance`, `autelon:notion-sync`                                                                                |
+
+`docs/06-inbound-design.md` "결정 전에 확인이 필요한 것"의 각 항목은 담당 전문가 role 이 정해져 있다(각 role 파일의 "네가 끌고 갈 미결 항목").
+
+**autelon 파일과 기존 문서의 관계**
+
+| 경로                                        | 내용                                                                                       | 기존 문서와의 관계                                         |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `board/tasks.json`, `board/milestones.json` | task 보드, 마일스톤 (형식: `board/README.md`)                                              | 구현 순서의 원본은 `docs/06`·`docs/05`. board 는 진행 추적 |
+| `prds/`                                     | feature 단위 PRD                                                                           | 도메인 동작의 원본은 `docs/02`·`docs/06`                   |
+| `handoffs/`                                 | role 작업 결과                                                                             | 승인된 결론은 해당 `docs/` 문서로 옮긴다                   |
+| `decisions/log.md`                          | 도입 뒤 사람의 결정                                                                        | 그 전의 결정은 `docs/04`, `docs/06`                        |
+| `docs/goals.md`                             | 목표와 지표 체계                                                                           | `docs/01` 의 요약. 지표는 strategist 제안 예정             |
+| `analytics/`                                | 지표 정의·쿼리 (da)                                                                        | —                                                          |
+| `state/`                                    | 스프린트 인계(`sprint.md`). 사용량 스냅샷 `quota.json` 은 커밋하지 않음                    | —                                                          |
+| `notion/`                                   | Notion 페이지·DB ID(`config.json`), 항목별 페이지 URL(`ids.json`). 커밋하지 않음, 로컬에만 | —                                                          |
+| `local/`                                    | 그 밖의 로컬 매핑. 커밋하지 않음                                                           | —                                                          |
+
+Notion URL·ID, 로컬 절대 경로, 계정 정보는 커밋·PR·handoff 에 쓰지 않는다. 커밋 전에 `git diff --cached | grep -n -E 'notion\.(com|so|site)|/Users/'` 가 비어 있어야 한다.
