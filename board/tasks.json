@@ -26,6 +26,19 @@
       "handoff": "handoffs/T-0002.md",
       "updated_at": "2026-10-03T18:58:00Z",
       "last_synced": null
+    },
+    {
+      "id": "T-0003",
+      "title": "06 구현 순서 5b(운송 서류·컨테이너·운송 진행·정정) 설계 검토",
+      "status": "done",
+      "role": "transport-expert",
+      "prd": null,
+      "milestone": null,
+      "depends_on": [],
+      "size": "large",
+      "handoff": "handoffs/T-0003.md",
+      "updated_at": "2026-10-03T19:33:00Z",
+      "last_synced": null
     }
   ]
 }
