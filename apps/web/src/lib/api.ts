@@ -1,5 +1,10 @@
 import type { OrderView } from '@repo/contracts/oms';
 import type {
+  PurchaseOrderRevisionView,
+  PurchaseOrderSummaryView,
+  PurchaseOrderView,
+} from '@repo/contracts/procurement';
+import type {
   CorrectUnitEventInput,
   DeviceRequestDetailView,
   DeviceRequestView,
@@ -55,6 +60,13 @@ export const api = {
   deviceRequests: () => request<DeviceRequestView[]>('/api/scm/device-requests'),
   deviceRequest: (id: string) =>
     request<DeviceRequestDetailView>(`/api/scm/device-requests/${encodeURIComponent(id)}`),
+  purchaseOrders: () => request<PurchaseOrderSummaryView[]>('/api/scm/purchase-orders'),
+  purchaseOrder: (poNumber: string) =>
+    request<PurchaseOrderView>(`/api/scm/purchase-orders/${encodeURIComponent(poNumber)}`),
+  purchaseOrderRevisions: (poNumber: string) =>
+    request<PurchaseOrderRevisionView[]>(
+      `/api/scm/purchase-orders/${encodeURIComponent(poNumber)}/revisions`,
+    ),
   correctEvent: (eventId: string, body: CorrectUnitEventInput) =>
     request<{ correctionId: string }>(`/api/scm/unit-events/${eventId}/corrections`, body),
 };
