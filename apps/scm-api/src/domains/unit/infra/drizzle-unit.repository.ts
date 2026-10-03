@@ -300,4 +300,18 @@ export class DrizzleUnitRepository implements UnitRepository {
         asc(sql`${units.registeredAt} is not null`),
       );
   }
+
+  async createUnits(newUnits: readonly Omit<Unit, 'id'>[]): Promise<Unit[]> {
+    const rows = newUnits.map(({ orderRef, ...columns }): UnitRow => {
+      return { ...columns, id: newId(), ...orderColumns(orderRef) };
+    });
+    try {
+      for (const chunk of chunked(rows)) {
+        await this.db.get().insert(units).values(chunk);
+      }
+    } catch (error) {
+      throw unitInsertFailure(error);
+    }
+    return rows.map(toUnit);
+  }
 }

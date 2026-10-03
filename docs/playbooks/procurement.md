@@ -11,7 +11,7 @@
 put() { curl -s -w '\n→ %{http_code}\n' -X PUT "$1" -H 'content-type: application/json' -d "$2"; }
 ```
 
-받은 수량은 입고·선적이 아직 없어 **항상 0** 이다 (`receivedQty` 0). 그래서 `PO_QTY_BELOW_RECEIVED`, `PO_HAS_RECEIPTS`, `PO_LINE_ALREADY_COMPLETE` 는 HTTP 로 만들 수 없고 단위 테스트(`purchase-order.service.spec.ts`, `purchase-order-revision.spec.ts`, `purchase-order-completion.spec.ts`)로만 확인된다. 5·6단계에서 받은 수량이 생기면 이 플레이북에 단계를 더한다.
+받은 수량은 입고가 아직 없어 **항상 0** 이다 (`receivedQty` 0; 선적 수량 `shippedQty` 는 [transport.md](transport.md)). 그래서 `PO_QTY_BELOW_RECEIVED`, `PO_HAS_RECEIPTS`, `PO_LINE_ALREADY_COMPLETE` 는 HTTP 로 만들 수 없고 단위 테스트(`purchase-order.service.spec.ts`, `purchase-order-revision.spec.ts`, `purchase-order-completion.spec.ts`)로만 확인된다. 6단계에서 받은 수량이 생기면 이 플레이북에 단계를 더한다.
 
 ## 준비 데이터
 
@@ -63,8 +63,8 @@ get $SCM/purchase-orders/$PO1
 
 ```
 {"poNumber":"PO-2026-000001","supplier":"ACME Shenzhen","orderDate":"2026-10-04","status":"DRAFT","currency":"USD","destinationLocationCode":"WH-ICN","incoterm":"FOB","incotermPlace":"Shenzhen","supplierOrderRef":null,"paymentTerms":null,"remarks":null,"createdAt":"<시각>","createdBy":"buyer-1","issuedAt":null,"issuedBy":null,"lines":[
- {"lineNo":1,"sku":"CAM-01","orderedQty":100,"requestedDeliveryDate":"2026-11-15","unitPrice":120.5,"overTolerancePct":5,"underTolerancePct":2.5,"receivedQty":0,"openQty":100,"completion":"OPEN","closed":false,"closedAt":null,"closedBy":null,"closeReason":null,"cancelled":false},
- {"lineNo":2,"sku":"LENS-01","orderedQty":50,"requestedDeliveryDate":"2026-11-30","unitPrice":null,"overTolerancePct":null,"underTolerancePct":null,"receivedQty":0,"openQty":50,"completion":"OPEN",…}]}
+ {"lineNo":1,"sku":"CAM-01","orderedQty":100,"requestedDeliveryDate":"2026-11-15","unitPrice":120.5,"overTolerancePct":5,"underTolerancePct":2.5,"receivedQty":0,"shippedQty":0,"openQty":100,"completion":"OPEN","closed":false,"closedAt":null,"closedBy":null,"closeReason":null,"cancelled":false},
+ {"lineNo":2,"sku":"LENS-01","orderedQty":50,"requestedDeliveryDate":"2026-11-30","unitPrice":null,"overTolerancePct":null,"underTolerancePct":null,"receivedQty":0,"shippedQty":0,"openQty":50,"completion":"OPEN",…}]}
 ```
 
 ### 4. 초안은 자유롭게 고친다 (이력 없음)
@@ -119,8 +119,8 @@ post $SCM/purchase-orders/$PO1/revisions '{"reason":"제조사 증량 요청","a
 기대: 201, `lines`:
 
 ```
-{"lineNo":1,"sku":"CAM-01","orderedQty":120,"requestedDeliveryDate":"2026-12-01","unitPrice":null,"overTolerancePct":5,"underTolerancePct":2.5,"receivedQty":0,"openQty":120,"completion":"OPEN",…,"cancelled":false}
-{"lineNo":2,"sku":"LENS-01","orderedQty":50,…,"receivedQty":0,"openQty":0,"completion":"CANCELLED",…,"cancelled":true}
+{"lineNo":1,"sku":"CAM-01","orderedQty":120,"requestedDeliveryDate":"2026-12-01","unitPrice":null,"overTolerancePct":5,"underTolerancePct":2.5,"receivedQty":0,"shippedQty":0,"openQty":120,"completion":"OPEN",…,"cancelled":false}
+{"lineNo":2,"sku":"LENS-01","orderedQty":50,…,"receivedQty":0,"shippedQty":0,"openQty":0,"completion":"CANCELLED",…,"cancelled":true}
 {"lineNo":3,"sku":"LENS-01","orderedQty":20,"requestedDeliveryDate":"2026-12-15",…,"openQty":20,"completion":"OPEN",…}
 ```
 
@@ -176,7 +176,7 @@ post $SCM/purchase-orders/$PO1/lines/1/close '{"reason":"제조사가 100개까�
 기대: 201, 줄 1:
 
 ```
-{"lineNo":1,"sku":"CAM-01","orderedQty":120,"requestedDeliveryDate":"2026-12-01","unitPrice":null,"overTolerancePct":5,"underTolerancePct":2.5,"receivedQty":0,"openQty":0,"completion":"CLOSED_SHORT","closed":true,"closedAt":"<시각>","closedBy":"buyer-1","closeReason":"제조사가 100개까지만 공급","cancelled":false}
+{"lineNo":1,"sku":"CAM-01","orderedQty":120,"requestedDeliveryDate":"2026-12-01","unitPrice":null,"overTolerancePct":5,"underTolerancePct":2.5,"receivedQty":0,"shippedQty":0,"openQty":0,"completion":"CLOSED_SHORT","closed":true,"closedAt":"<시각>","closedBy":"buyer-1","closeReason":"제조사가 100개까지만 공급","cancelled":false}
 ```
 
 `openQty` 가 0 이 된다(더 기다리지 않는다). 줄 3 은 그대로 `OPEN`.

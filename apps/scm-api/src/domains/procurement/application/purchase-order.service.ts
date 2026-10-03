@@ -86,6 +86,34 @@ export class PurchaseOrderService {
     return detail;
   }
 
+  /** 모르는 번호면 undefined. 조회 조건처럼 없어도 되는 곳에서 쓴다. */
+  find(poNumber: string): Promise<PurchaseOrderDetail | undefined> {
+    return this.orders.findByPoNumber(poNumber);
+  }
+
+  /** 발주 번호 → 발주 id. 모르는 번호는 들어 있지 않다. 잠그지 않는다. */
+  idsOf(poNumbers: readonly string[]): Promise<Map<string, string>> {
+    return this.orders.findIdsByPoNumbers([...new Set(poNumbers)]);
+  }
+
+  /** 발주 id 로 읽는다. 없는 id 는 결과에 없다. */
+  getMany(ids: readonly string[]): Promise<PurchaseOrderDetail[]> {
+    return this.orders.findByIds([...new Set(ids)]);
+  }
+
+  /**
+   * 발주 행들을 한꺼번에 잠그고 읽는다. 선적을 기록하는 트랜잭션의 첫 쿼리로 부른다:
+   * 같은 발주의 차수 번호와 선적 누계를 직렬화하고, 읽는 상태(ISSUED 여부, 줄의 닫힘)가 개정·취소와 겹치지 않게 한다.
+   */
+  lockAll(ids: readonly string[]): Promise<PurchaseOrderDetail[]> {
+    return this.orders.findByIdsForUpdate([...new Set(ids)]);
+  }
+
+  /** 발주 하나를 잠그고 읽는다. 모르는 번호면 PO_NOT_FOUND. 트랜잭션의 첫 쿼리로 부른다. */
+  lockByPoNumber(poNumber: string): Promise<PurchaseOrderDetail> {
+    return this.lock(poNumber);
+  }
+
   list(limit: number): Promise<PurchaseOrderDetail[]> {
     return this.orders.listRecent(limit);
   }

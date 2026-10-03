@@ -6,6 +6,7 @@ const NAV = [
   { to: '/stock', label: '재고' },
   { to: '/orders', label: '주문' },
   { to: '/purchase-orders', label: '발주' },
+  { to: '/shipments', label: '선적' },
 ] as const;
 
 export const Route = createRootRoute({

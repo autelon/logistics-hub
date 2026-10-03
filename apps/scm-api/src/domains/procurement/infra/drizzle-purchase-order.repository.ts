@@ -81,6 +81,38 @@ export class DrizzlePurchaseOrderRepository implements PurchaseOrderRepository {
     return row && (await this.loadDetails([row]))[0];
   }
 
+  async findIdsByPoNumbers(poNumbers: readonly string[]): Promise<Map<string, string>> {
+    if (poNumbers.length === 0) return new Map();
+    const rows = await this.db
+      .get()
+      .select({ id: purchaseOrders.id, poNumber: purchaseOrders.poNumber })
+      .from(purchaseOrders)
+      .where(inArray(purchaseOrders.poNumber, [...poNumbers]));
+    return new Map(rows.map((row) => [row.poNumber, row.id]));
+  }
+
+  async findByIds(ids: readonly string[]): Promise<PurchaseOrderDetail[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .get()
+      .select()
+      .from(purchaseOrders)
+      .where(inArray(purchaseOrders.id, [...ids]));
+    return this.loadDetails(rows);
+  }
+
+  async findByIdsForUpdate(ids: readonly string[]): Promise<PurchaseOrderDetail[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .get()
+      .select()
+      .from(purchaseOrders)
+      .where(inArray(purchaseOrders.id, [...ids]))
+      .orderBy(asc(purchaseOrders.id))
+      .for('update');
+    return this.loadDetails(rows);
+  }
+
   async listRecent(limit: number): Promise<PurchaseOrderDetail[]> {
     // id 는 UUIDv7 이라 만든 순서대로 정렬된다.
     const rows = await this.db

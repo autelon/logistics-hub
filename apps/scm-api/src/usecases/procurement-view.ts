@@ -53,6 +53,7 @@ const toLineView = (
   orderCancelled: boolean,
   products: ReadonlyMap<string, Product>,
   received: ReceivedQuantities,
+  shipped: ReceivedQuantities,
 ): PurchaseOrderLineView => {
   // 취소된 발주의 줄은 더 기다리지 않는다: 줄을 따로 취소하지 않았어도 CANCELLED 로 계산한다.
   const progress = lineProgress(
@@ -68,6 +69,7 @@ const toLineView = (
     overTolerancePct: line.overTolerancePct,
     underTolerancePct: line.underTolerancePct,
     receivedQty: progress.receivedQty,
+    shippedQty: shipped.get(line.id) ?? 0,
     openQty: progress.openQty,
     completion: progress.completion,
     closed: line.closed,
@@ -83,6 +85,7 @@ export const toPurchaseOrderView = (
   destinationLocationCode: string,
   products: ReadonlyMap<string, Product>,
   received: ReceivedQuantities,
+  shipped: ReceivedQuantities,
 ): PurchaseOrderView => ({
   poNumber: order.poNumber,
   supplier: order.supplier,
@@ -99,7 +102,9 @@ export const toPurchaseOrderView = (
   createdBy: order.createdBy,
   issuedAt: order.issuedAt?.toISOString() ?? null,
   issuedBy: order.issuedBy,
-  lines: lines.map((line) => toLineView(line, order.status === 'CANCELLED', products, received)),
+  lines: lines.map((line) =>
+    toLineView(line, order.status === 'CANCELLED', products, received, shipped),
+  ),
 });
 
 export const toPurchaseOrderSummaryView = (

@@ -55,6 +55,12 @@ describe('projectUnit', () => {
     });
   });
 
+  it('개체의 이력은 제조사 출하 목록의 DISPATCHED 에서 시작해도 이상이 아니다', () => {
+    const state = project([fact('DISPATCHED', 1), fact('RECEIVED', 2, { locationId: 'WH' })]);
+    expect(state.status).toBe('IN_STOCK');
+    expect(state.anomalies).toEqual([]);
+  });
+
   it('입고된 재고는 거점에 있다', () => {
     const state = project([
       fact('MANUFACTURED', 1, { locationId: 'FAC' }),

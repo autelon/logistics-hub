@@ -60,6 +60,13 @@ export interface RegistrationTarget {
   product: ProductRef;
 }
 
+/** 한 사실을 기록할 개체. 개체와 제품은 이미 잠겨 있어야 한다. */
+export interface FactTarget {
+  unit: Unit;
+  product: ProductRef;
+  fact: NewUnitEvent;
+}
+
 /** 시리얼 추적 제품만 등록을 요구한다. */
 const projectionOf = (product: ProductRef) => ({
   requiresRegistration: product.trackingMode === 'SERIAL',
@@ -107,6 +114,66 @@ export class UnitService {
       createdAt: now,
       updatedAt: now,
     });
+  }
+
+  /** 처음 보는 시리얼들을 한 번에 등록한다 (`register` 의 대량 경로). 돌려주는 순서는 넘긴 순서와 같다. */
+  createAll(items: readonly { serialNumber: string; product: ProductRef }[]): Promise<Unit[]> {
+    if (items.length === 0) return Promise.resolve([]);
+    const now = new Date();
+    return this.units.createUnits(
+      items.map(({ serialNumber, product }) => ({
+        serialNumber,
+        productId: product.id,
+        ...projectUnit([], projectionOf(product)),
+        createdAt: now,
+        updatedAt: now,
+      })),
+    );
+  }
+
+  /**
+   * 사실 여러 건을 한 번에 기록하고 알린 뒤, 개체마다 한 번씩만 다시 계산한다 (`record` 의 대량 경로).
+   * 한 개체에 사실이 여럿이어도 된다. 개체마다 다시 계산하기 전후를 비교해 기기 서버에 보낼 요청이 필요하면 돌려준다.
+   * 개체는 이 호출 직전에 잠근 것이어야 한다.
+   */
+  async recordAll(
+    targets: readonly FactTarget[],
+  ): Promise<{ unit: Unit; deviceRequest: DeviceRequestType }[]> {
+    if (targets.length === 0) return [];
+    const now = new Date();
+
+    // 저장소가 넘겨받은 객체를 제자리에서 갱신할 수 있으니, 갱신하기 전에 값을 따로 떠 둔다.
+    const before = new Map(
+      targets.map(({ unit }) => [
+        unit.id,
+        { status: unit.status, registeredAt: unit.registeredAt },
+      ]),
+    );
+    const events = await this.units.addEvents(
+      targets.map(({ unit, fact }) => {
+        const { location, ...rest } = fact;
+        return { ...rest, unitId: unit.id, recordedAt: now, locationId: location?.id ?? null };
+      }),
+    );
+    for (const [i, target] of targets.entries()) {
+      const event = events[i];
+      if (event) {
+        await this.announce(target.unit, target.product, event, target.fact.location?.code ?? null);
+      }
+    }
+
+    const distinct = [...new Map(targets.map((target) => [target.unit.id, target])).values()];
+    const effective = await this.units.listEffectiveEventsOf(distinct.map(({ unit }) => unit.id));
+    const byUnit = Map.groupBy(effective, (event) => event.unitId);
+    const requests: { unit: Unit; deviceRequest: DeviceRequestType }[] = [];
+    for (const { unit, product } of distinct) {
+      const state = projectUnit(byUnit.get(unit.id) ?? [], projectionOf(product));
+      await this.units.updateState(unit.id, state, now);
+      const previous = before.get(unit.id);
+      const deviceRequest = previous && activationChange(previous, state);
+      if (deviceRequest) requests.push({ unit, deviceRequest });
+    }
+    return requests;
   }
 
   /**

@@ -11,18 +11,24 @@ export const MAX_ATTEMPTS = 5;
  * 진 트랜잭션은 롤백되어 있고 다시 하는 쪽은 새 트랜잭션이라, 그 사이에 커밋된 행이 새 스냅샷에 보인다.
  * 바깥 트랜잭션 안에서 부르면 `run` 이 합류해서 이 재시도가 소용없다. 입구의 usecase 만 쓴다.
  *
+ * `conflict` 는 클래스 하나이거나 여러 개다. 여러 개를 주면 그중 하나라도 해당하는 에러에서 다시 하고, 시도 횟수는 합쳐서 센다
+ * (클래스마다 이 함수를 겹쳐 부르면 시도가 곱해진다).
+ *
  * `conflict` 가 아닌 에러는 그대로 던진다. 시도를 다 쓰고도 지면 마지막 에러를 던진다.
  */
+type ConflictClass = abstract new (...args: never[]) => Error;
+
 export const retryOnConflict = async <T>(
-  conflict: abstract new (...args: never[]) => Error,
+  conflict: ConflictClass | readonly ConflictClass[],
   attempt: () => Promise<T>,
 ): Promise<T> => {
+  const conflicts = Array.isArray(conflict) ? conflict : [conflict];
   let attempts = 1;
   for (;;) {
     try {
       return await attempt();
     } catch (error) {
-      if (!(error instanceof conflict) || attempts >= MAX_ATTEMPTS) throw error;
+      if (!conflicts.some((c) => error instanceof c) || attempts >= MAX_ATTEMPTS) throw error;
       attempts += 1;
     }
   }

@@ -30,5 +30,8 @@ export interface UnitRepository {
 
   findLifecycle(serialNumber: string): Promise<UnitLifecycle | undefined>;
   countStock(): Promise<StockCount[]>;
+
+  /** `createUnit` 의 대량 경로. id 는 저장할 때 발급하고, 돌려주는 순서는 넘긴 순서와 같다. */
+  createUnits(units: readonly Omit<Unit, 'id'>[]): Promise<Unit[]>;
 }
 export const UnitRepository = Symbol('UnitRepository');

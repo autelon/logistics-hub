@@ -59,6 +59,21 @@ export class MemoryPurchaseOrderRepository implements PurchaseOrderRepository {
   findByPoNumberForUpdate(poNumber: string) {
     return this.findByPoNumber(poNumber);
   }
+  findIdsByPoNumbers(poNumbers: readonly string[]) {
+    return Promise.resolve(
+      new Map(
+        this.orders.filter((o) => poNumbers.includes(o.poNumber)).map((o) => [o.poNumber, o.id]),
+      ),
+    );
+  }
+  findByIds(ids: readonly string[]) {
+    return Promise.resolve(
+      this.orders.filter((o) => ids.includes(o.id)).map((order) => this.detailOf(order)),
+    );
+  }
+  findByIdsForUpdate(ids: readonly string[]) {
+    return this.findByIds(ids);
+  }
   listRecent(limit: number) {
     return Promise.resolve(
       this.orders

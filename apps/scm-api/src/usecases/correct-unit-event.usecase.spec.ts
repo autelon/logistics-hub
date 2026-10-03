@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { seedInStock, seedUnit, setupMemory } from '../testing/memory-repositories.js';
+import { setupMemoryShipments } from '../testing/memory-shipment-repository.js';
 import { ApplyAsCaseEventUsecase } from './apply-as-case-event.usecase.js';
 import { CorrectUnitEventUsecase } from './correct-unit-event.usecase.js';
 import { RegisterUnitsUsecase } from './register-units.usecase.js';
@@ -14,6 +15,7 @@ const setup = () => {
       memory.catalog,
       memory.units,
       memory.deviceRequests,
+      setupMemoryShipments().service,
     ),
     applyAs: new ApplyAsCaseEventUsecase(
       memory.tx,
