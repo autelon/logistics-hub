@@ -42,6 +42,12 @@ export class CatalogService {
     return product;
   }
 
+  /** 여러 제품을 한 번에. id → 제품. */
+  async productsOf(productIds: readonly string[]): Promise<Map<string, Product>> {
+    const found = await this.catalog.findProductsByIds([...new Set(productIds)]);
+    return new Map(found.map((product) => [product.id, product]));
+  }
+
   /** 거점 코드를 해석한다. 코드가 없으면(null) 거점 없는 사실이다. */
   async resolveLocation(code: string | null): Promise<Location | null> {
     if (!code) return null;

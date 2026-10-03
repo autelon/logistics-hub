@@ -15,13 +15,15 @@
 
 ### 테이블
 
-| 테이블                   | 내용                                                                          |
-| ------------------------ | ----------------------------------------------------------------------------- |
-| `products`               | SKU 기준 정보. `sku` 는 unique 코드                                           |
-| `locations`              | 재고가 있을 수 있는 거점 (공장·창고·서비스센터)과 운영 업체. `code` 는 unique |
-| `units`                  | 물리 제품 한 개. 현재 상태·위치·주문은 **이력에서 계산한 캐시**               |
-| `unit_events`            | 제품에 일어난 사실. **추가만 한다**                                           |
-| `unit_event_corrections` | 정정 기록. 어떤 사실을 무효로 하고 무엇으로 대체했는지, 사유, 처리자          |
+| 테이블                   | 내용                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `products`               | SKU 기준 정보. `sku` 는 unique 코드, `tracking_mode`(SERIAL·LOT·NONE, 기본 SERIAL) |
+| `locations`              | 재고가 있을 수 있는 거점 (공장·창고·서비스센터)과 운영 업체. `code` 는 unique      |
+| `units`                  | 물리 제품 한 개. 현재 상태·위치·주문·`registered_at` 은 **이력에서 계산한 캐시**   |
+| `unit_events`            | 제품에 일어난 사실. **추가만 한다**                                                |
+| `unit_event_corrections` | 정정 기록. 어떤 사실을 무효로 하고 무엇으로 대체했는지, 사유, 처리자               |
+| `device_requests`        | 기기 서버에 보내는 요청(`REGISTER`·`DEACTIVATE`). 상태는 저장하지 않고 계산한다    |
+| `device_request_items`   | 요청에 딸린 시리얼과 시리얼별 처리 결과. `(request_id, unit_id)` unique            |
 
 ### 사실(unit event)의 종류와 상태 변화
 
@@ -37,8 +39,11 @@
 | `DOA_CONFIRMED`   | 초기 불량 확정 | `SHIPPED`, `DELIVERED`, `RETURNED` | `DOA`                 |
 | `SCRAPPED`        | 폐기           | `DOA`, `RETURNED`, `IN_STOCK`      | `SCRAPPED`            |
 
+`REGISTERED`(제품 등록)는 이 표에 없다. 물리 사실이 아니라 **등록 여부라는 다른 축**의 사실이라 상태·거점·이상을 바꾸지 않고 `registeredAt` 만 채운다 ([제품 등록](#제품-등록과-기기-요청)).
+
 표의 "올 수 있는 상태"가 아닌 곳에서 사실이 오면 **반영은 하되 이상으로 표시**한다.
 `DISPATCHED`·`SHIPPED`·`DELIVERED`·`SCRAPPED` 는 거점을 비운다. 특히 `DELIVERED` 는 제품이 고객 손에 있다는 뜻이라, 출고가 무효화되어 입고 뒤 배송 완료만 남아도 위치는 비고 재고에는 거점 없이 `DELIVERED` 로 잡힌다. 이후 `RETURN_RECEIVED` 가 오면 회수 거점이 다시 위치가 된다.
+`SHIPPED`·`DELIVERED` 가 `registeredAt` 이 비어 있을 때 접히면 `<시각> <사실>: 미등록 개체` 이상을 붙인다. 시리얼 추적 제품(`tracking_mode = SERIAL`)에만 적용되고(`projectUnit` 의 `requiresRegistration`), **자동으로 등록하지 않는다** — 사람이 판단한다. 접는 순서가 `occurredAt` 이라 등록보다 일찍 일어난 것으로 보고된 출고도 이상이다.
 규칙은 [unit-projection.ts](../apps/scm-api/src/domains/unit/domain/unit-projection.ts) 한 파일에 있고 순수 함수라 DB 없이 테스트한다.
 
 ### 두 개의 시간
@@ -61,8 +66,29 @@
 
 ### 재고
 
-`GET /stock` 은 `units` 를 SKU × 거점 × 상태로 센 값이다. 정정이 이미 반영된 상태에서 세기 때문에
+`GET /stock` 은 `units` 를 SKU × 거점 × 상태 × 등록 여부(`registered`)로 센 값이다. 정정이 이미 반영된 상태에서 세기 때문에
 업체 전산과 다를 수 있고, 그 차이가 바로 이 시스템이 드러내려는 것이다.
+
+### 제품 등록과 기기 요청
+
+운영자가 `POST /unit-registrations { serialNumbers (1..5000), actor }` 로 시리얼 목록을 제품으로 등록한다. 우리가 내리는 명령이라 전제 조건을 검사하고, 등록할 수 있는 것만 등록하며 나머지는 사유와 함께 돌려준다.
+
+| 제외 사유            | 뜻                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `UNIT_NOT_FOUND`     | 모르는 시리얼                                                                                         |
+| `NOT_SERIAL_TRACKED` | 제품이 `SERIAL` 추적이 아님                                                                           |
+| `ALREADY_REGISTERED` | 유효한 `REGISTERED` 사실이 이미 있음 (다시 등록해도 요청을 또 만들지 않는다)                          |
+| `NOT_IN_STOCK`       | 개체 상태가 `IN_STOCK` 이 아님. 적치 확인을 요구하는 정책은 입고 보고를 단계별로 받는 단계에서 더한다 |
+
+- 한 트랜잭션에서 시리얼을 한꺼번에 잠그고 `REGISTERED` 사실(출처 `logistics-hub`, `source.ref` = 운영자)을 대량으로 넣은 뒤 개체마다 한 번 다시 접는다. 같은 시리얼이 목록에 여러 번 있으면 한 번만 본다.
+- 등록된 것이 있으면 **기기 요청(`REGISTER`) 하나**를 만든다. 응답: `{ requestId | null, registered, excluded }`.
+- `REGISTERED` 가 정정으로 무효화되면 `registeredAt` 이 비워진다(접을 때 유효한 사실만 쓰므로).
+
+**기기 서버에 활성이어야 하는가** = `registeredAt` 이 있고 상태가 `DOA`·`SCRAPPED` 가 아님 (`shouldBeActive`). 사실을 다시 접는 모든 usecase(사실 기록, 정정, AS 이벤트 수신)가 접기 전후를 비교하고(`activationChange`), 바뀌었으면 기기 요청을 **명령 하나당 하나** 만든다.
+활성 → 비활성은 `DEACTIVATE`(사유: 원인이 된 사실의 종류, 등록 사실을 무효화했으면 `REGISTRATION_VOIDED`), 비활성 → 활성(DOA 정정 등)은 `REGISTER`(등록 명령 자신은 배치 요청 하나를 만들므로 이 경로를 쓰지 않는다).
+
+기기 요청은 `NOT_NOTIFIED → NOTIFIED → IN_PROGRESS → COMPLETED | PARTIALLY_FAILED` 로 계산된다 (알림 시각과 시리얼별 결과에서. 결과가 하나라도 있으면 알림 시각과 무관하게 결과를 따른다).
+기기 서버와의 연동 방식은 [03-architecture.md](03-architecture.md) 의 "기기 서버 연동".
 
 ## OMS — 주문과 물리 제품 연결
 

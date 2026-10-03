@@ -17,19 +17,27 @@ const StockPage = () => {
                 <th className="py-1 pr-4 font-medium">SKU</th>
                 <th className="py-1 pr-4 font-medium">거점</th>
                 <th className="py-1 pr-4 font-medium">상태</th>
+                <th className="py-1 pr-4 font-medium">등록</th>
                 <th className="py-1 text-right font-medium">수량</th>
               </tr>
             </thead>
             <tbody>
               {query.data.map((row) => (
                 <tr
-                  key={`${row.sku}|${row.locationCode}|${row.status}`}
+                  key={`${row.sku}|${row.locationCode}|${row.status}|${row.registered}`}
                   className="border-t border-slate-100"
                 >
                   <td className="py-1.5 pr-4 font-mono">{row.sku}</td>
                   <td className="py-1.5 pr-4">{row.locationCode ?? '—'}</td>
                   <td className="py-1.5 pr-4">
                     <Badge>{row.status}</Badge>
+                  </td>
+                  <td className="py-1.5 pr-4">
+                    {row.registered ? (
+                      <Badge>등록</Badge>
+                    ) : (
+                      <span className="text-slate-400">미등록</span>
+                    )}
                   </td>
                   <td className="py-1.5 text-right tabular-nums">{row.quantity}</td>
                 </tr>

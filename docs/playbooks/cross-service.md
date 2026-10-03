@@ -24,7 +24,7 @@ echo $?
 
 ### 1. 기준 정보
 
-[scm-api.md](scm-api.md) 1, 3, 6 (제품 CAM-01·BAT-01, 거점 3곳) 과 [oms-api.md](oms-api.md) 3 (KIT-01 = CAM-01 ×1 + BAT-01 ×1). 모두 201.
+[scm-api.md](scm-api.md) 1, 3, 6 (제품 CAM-01·BAT-01 — 등록이 필요 없는 `NONE`, 거점 3곳) 과 [oms-api.md](oms-api.md) 3 (KIT-01 = CAM-01 ×1 + BAT-01 ×1). 모두 201.
 
 ### 2. 세 제품을 제조 → 이동 → 인천 창고 입고
 
@@ -36,7 +36,7 @@ post $SCM/unit-events "{\"serialNumber\":\"CAM-A-$RUN\",\"type\":\"DISPATCHED\",
 post $SCM/unit-events "{\"serialNumber\":\"CAM-A-$RUN\",\"type\":\"RECEIVED\",\"occurredAt\":\"2026-09-03T00:00:00Z\",\"locationCode\":\"WH-ICN\",\"source\":{\"system\":\"3PL B\"}}"
 ```
 
-기대: 9건 모두 201. `get $SCM/stock` 에 `{"sku":"CAM-01","locationCode":"WH-ICN","status":"IN_STOCK","quantity":≥2}`, `{"sku":"BAT-01","locationCode":"WH-ICN","status":"IN_STOCK","quantity":≥1}`.
+기대: 9건 모두 201. `get $SCM/stock` 에 `{"sku":"CAM-01","locationCode":"WH-ICN","status":"IN_STOCK","registered":false,"quantity":≥2}`, `{"sku":"BAT-01","locationCode":"WH-ICN","status":"IN_STOCK","registered":false,"quantity":≥1}`.
 
 ### 3. 키트 1개 주문
 

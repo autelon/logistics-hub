@@ -1,5 +1,13 @@
 import type { OrderView } from '@repo/contracts/oms';
-import type { CorrectUnitEventInput, StockRow, UnitLifecycleView } from '@repo/contracts/scm';
+import type {
+  CorrectUnitEventInput,
+  DeviceRequestDetailView,
+  DeviceRequestView,
+  RegisterUnitsRequest,
+  RegisterUnitsResult,
+  StockRow,
+  UnitLifecycleView,
+} from '@repo/contracts/scm';
 
 /** 서버가 낸 에러. 화면 분기는 code 로 하고, message 는 있으면 보여 주기만 한다. */
 export class ApiRequestError extends Error {
@@ -42,6 +50,11 @@ export const api = {
     request<UnitLifecycleView>(`/api/scm/units/${encodeURIComponent(serialNumber)}`),
   stock: () => request<StockRow[]>('/api/scm/stock'),
   orders: () => request<OrderView[]>('/api/oms/orders'),
+  registerUnits: (body: RegisterUnitsRequest) =>
+    request<RegisterUnitsResult>('/api/scm/unit-registrations', body),
+  deviceRequests: () => request<DeviceRequestView[]>('/api/scm/device-requests'),
+  deviceRequest: (id: string) =>
+    request<DeviceRequestDetailView>(`/api/scm/device-requests/${encodeURIComponent(id)}`),
   correctEvent: (eventId: string, body: CorrectUnitEventInput) =>
     request<{ correctionId: string }>(`/api/scm/unit-events/${eventId}/corrections`, body),
 };

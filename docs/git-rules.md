@@ -21,7 +21,7 @@ Refs: docs/02-domain-model.md, #123
 
 - 형식은 `type(scope): 요약`, 72자 이내. `commit-msg` 훅이 검사한다.
 - **type**: `feat` 동작 추가 · `fix` 잘못된 동작 수정 · `refactor` 동작 변화 없는 구조 변경 · `perf` · `test` · `docs` · `build` 의존성·빌드·도구 · `ci` · `chore` 그 외
-- **scope**: 워크스페이스 이름 그대로 — `scm-api` `oms-api` `as-api` `web` `contracts` `messaging` `db-kit` `nest-kit` `typescript-config`. 리포 전역 설정은 `repo`. 여러 개면 쉼표로 (`contracts,oms-api`).
+- **scope**: 워크스페이스 이름 그대로 — `scm-api` `oms-api` `as-api` `device-api` `web` `contracts` `messaging` `db-kit` `nest-kit` `typescript-config`. 리포 전역 설정은 `repo`. 여러 개면 쉼표로 (`contracts,oms-api`).
 - 요약은 **동작이나 결과**로 쓴다. "units.service 수정"이 아니라 "배송 완료 이벤트에 출고 때의 주문 참조를 이어 붙임".
 - 서비스 간 규격(`@repo/contracts` 의 이벤트·요청·응답)을 호환되지 않게 바꾸면 `!` 를 붙이고(`feat(contracts)!: ...`), 본문에 `BREAKING:` 으로 어느 소비자가 무엇을 고쳐야 하는지 적는다.
 

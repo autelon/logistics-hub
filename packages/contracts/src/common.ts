@@ -5,6 +5,7 @@ export const Topics = {
   scmUnitEvents: 'scm.unit-events',
   omsOrderEvents: 'oms.order-events',
   asCaseEvents: 'as.case-events',
+  scmDeviceRequests: 'scm.device-requests',
 } as const;
 
 /** 물리 제품이 어느 주문의 어느 출고 단위로 나갔는지 가리키는 참조. */

@@ -88,13 +88,18 @@ export const logConfig = defineConfig(
   (env) => ({ level: env.LOG_LEVEL, format: env.LOG_FORMAT }),
 );
 
-const sharedConfigs: DefinedConfig[] = [httpConfig, databaseConfig, messagingConfig, logConfig];
-
 /** 서비스마다 다른 기본값. 환경변수에도 .env 에도 없을 때만 쓰인다. */
 export interface ServiceDefaults {
   PORT: number;
-  DATABASE_URL: string;
+  /** DB 를 쓰는 서비스만 준다. 없으면 DB·메시징 네임스페이스를 등록하지 않는다 (DB 없는 서비스, 예: 모의 기기 서버). */
+  DATABASE_URL?: string;
 }
+
+/** 모든 서비스가 읽는 공용 네임스페이스. DB 를 쓰지 않는 서비스는 http 와 log 만 읽는다. */
+export const sharedConfigsOf = (defaults: ServiceDefaults): DefinedConfig[] =>
+  defaults.DATABASE_URL === undefined
+    ? [httpConfig, logConfig]
+    : [httpConfig, databaseConfig, messagingConfig, logConfig];
 
 /**
  * 기본값을 채우고 모든 네임스페이스의 스키마로 한 번에 검증한다 (`ConfigModule.forRoot` 의 `validate` 훅).
@@ -104,7 +109,11 @@ export interface ServiceDefaults {
 export const validateEnv =
   (configs: DefinedConfig[], defaults: ServiceDefaults) =>
   (env: Record<string, unknown>): Record<string, unknown> => {
-    const merged = { PORT: String(defaults.PORT), DATABASE_URL: defaults.DATABASE_URL, ...env };
+    const merged = {
+      PORT: String(defaults.PORT),
+      ...(defaults.DATABASE_URL !== undefined && { DATABASE_URL: defaults.DATABASE_URL }),
+      ...env,
+    };
     const problems = configs.flatMap((config) => problemsOf(config.envSchema, merged));
     if (problems.length > 0) throw new ConfigError(problems);
     return merged;
@@ -120,7 +129,7 @@ export const serviceConfigModule = (options: {
   defaults: ServiceDefaults;
   load?: DefinedConfig[];
 }) => {
-  const configs = [...sharedConfigs, ...(options.load ?? [])];
+  const configs = [...sharedConfigsOf(options.defaults), ...(options.load ?? [])];
   const module = ConfigModule.forRoot({
     isGlobal: true,
     load: configs,

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 
 import { newId } from '@repo/db-kit/columns';
 import { CurrentDb } from '@repo/nest-kit/current-db';
@@ -18,7 +18,7 @@ export class DrizzleCatalogRepository implements CatalogRepository {
       .get()
       .insert(products)
       .values({ id: newId(), ...input, createdAt: new Date() })
-      .onDuplicateKeyUpdate({ set: { name: input.name } });
+      .onDuplicateKeyUpdate({ set: { name: input.name, trackingMode: input.trackingMode } });
   }
 
   listProducts(): Promise<Product[]> {
@@ -33,6 +33,15 @@ export class DrizzleCatalogRepository implements CatalogRepository {
   async findProductById(id: string): Promise<Product | undefined> {
     const [row] = await this.db.get().select().from(products).where(eq(products.id, id)).limit(1);
     return row;
+  }
+
+  async findProductsByIds(ids: readonly string[]): Promise<Product[]> {
+    if (ids.length === 0) return [];
+    return this.db
+      .get()
+      .select()
+      .from(products)
+      .where(inArray(products.id, [...ids]));
   }
 
   async upsertLocation(input: LocationInput): Promise<void> {

@@ -125,18 +125,20 @@ Abridged output (the script prints in Korean):
   order status: FULFILLED
 ```
 
-| App       | URL                   | Role                                                    |
-| --------- | --------------------- | ------------------------------------------------------- |
-| `web`     | http://localhost:5173 | Admin console: unit trace, stock, orders                |
-| `scm-api` | http://localhost:3001 | Unit ledger, corrections, stock                         |
-| `oms-api` | http://localhost:3002 | Order ingestion, bundle explosion, fulfillment tracking |
-| `as-api`  | http://localhost:3003 | Minimal after-sales service for the DOA integration     |
+| App          | URL                   | Role                                                                        |
+| ------------ | --------------------- | --------------------------------------------------------------------------- |
+| `web`        | http://localhost:5173 | Admin console: unit trace, product registration, stock, orders              |
+| `scm-api`    | http://localhost:3001 | Unit ledger, corrections, stock                                             |
+| `oms-api`    | http://localhost:3002 | Order ingestion, bundle explosion, fulfillment tracking                     |
+| `as-api`     | http://localhost:3003 | Minimal after-sales service for the DOA integration                         |
+| `device-api` | http://localhost:3004 | Mock device server: pulls registered serials and reports per-serial results |
 
 ## Project structure
 
 ```text
 apps/
   scm-api  oms-api  as-api   NestJS services, one database each
+  device-api                 Mock device server (no database): the system that activates registered units
   web                        Vite + React admin console
 packages/
   contracts                  Cross-service contracts: event/request schemas (zod), response types

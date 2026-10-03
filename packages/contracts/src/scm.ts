@@ -13,8 +13,16 @@ export const UnitEventType = z.enum([
   'RETURN_RECEIVED', // 회수 입고
   'DOA_CONFIRMED', // 초기 불량 확정
   'SCRAPPED', // 폐기
+  'REGISTERED', // 제품 등록(활성화 대상이 됨). 물리 상태는 바꾸지 않는다
 ]);
 export type UnitEventType = z.infer<typeof UnitEventType>;
+
+/** 물리 상태·위치를 바꾸는 사실. `REGISTERED` 는 물리 사실이 아니라 등록 여부 축의 사실이다. */
+export type PhysicalUnitEventType = Exclude<UnitEventType, 'REGISTERED'>;
+
+/** 제품의 추적 방식. SERIAL 만 개체 단위 이력(unit_events)으로 추적하고 등록 대상이다. */
+export const TrackingMode = z.enum(['SERIAL', 'LOT', 'NONE']);
+export type TrackingMode = z.infer<typeof TrackingMode>;
 
 export const UnitStatus = z.enum([
   'UNKNOWN',
@@ -32,6 +40,28 @@ export type UnitStatus = z.infer<typeof UnitStatus>;
 export const LocationType = z.enum(['FACTORY', 'WAREHOUSE', 'SERVICE_CENTER']);
 export type LocationType = z.infer<typeof LocationType>;
 
+export const RegistrationExclusionReason = z.enum([
+  'UNIT_NOT_FOUND', // 우리가 모르는 시리얼
+  'NOT_SERIAL_TRACKED', // 제품이 시리얼 추적 방식이 아님
+  'NOT_IN_STOCK', // 개체 상태가 IN_STOCK 이 아님
+  'ALREADY_REGISTERED',
+]);
+export type RegistrationExclusionReason = z.infer<typeof RegistrationExclusionReason>;
+
+/** 기기 서버에 보내는 요청의 종류. 등록과 비활성화는 서로 다른 처리라 요청을 따로 만든다. */
+export const DeviceRequestType = z.enum(['REGISTER', 'DEACTIVATE']);
+export type DeviceRequestType = z.infer<typeof DeviceRequestType>;
+
+/** 요청 상태는 저장하지 않고 시리얼별 결과에서 계산한다. */
+export const DeviceRequestStatus = z.enum([
+  'NOT_NOTIFIED', // 아직 기기 서버에 알리지 못함
+  'NOTIFIED', // 알렸고 결과는 아직 없음
+  'IN_PROGRESS', // 일부 시리얼의 결과만 왔음
+  'COMPLETED', // 모두 성공
+  'PARTIALLY_FAILED', // 모두 처리되었고 실패가 있음
+]);
+export type DeviceRequestStatus = z.infer<typeof DeviceRequestStatus>;
+
 // ---------- 에러 코드 ----------
 
 export const ScmErrorCode = z.enum([
@@ -42,6 +72,8 @@ export const ScmErrorCode = z.enum([
   'UNKNOWN_SKU',
   'SKU_REQUIRED', // 처음 보는 시리얼인데 sku 가 없음
   'SERIAL_SKU_MISMATCH', // 이미 다른 SKU 로 등록된 시리얼
+  'DEVICE_REQUEST_NOT_FOUND',
+  'DEVICE_REQUEST_UNKNOWN_SERIAL', // 결과에 그 기기 요청에 속하지 않는 시리얼이 있음. details 에 시리얼 목록
 ]);
 export type ScmErrorCode = z.infer<typeof ScmErrorCode>;
 
@@ -50,6 +82,7 @@ export type ScmErrorCode = z.infer<typeof ScmErrorCode>;
 export const RegisterProductRequest = z.object({
   sku: z.string().min(1).max(64),
   name: z.string().min(1).max(200),
+  trackingMode: TrackingMode.default('SERIAL'),
 });
 export type RegisterProductRequest = z.infer<typeof RegisterProductRequest>;
 
@@ -99,11 +132,61 @@ export type CorrectUnitEventRequest = z.infer<typeof CorrectUnitEventRequest>;
 /** 기본값이 채워지기 전, 호출하는 쪽이 보내는 형태. */
 export type CorrectUnitEventInput = z.input<typeof CorrectUnitEventRequest>;
 
+/** 제품 등록 명령. 시리얼 목록을 받아 등록할 수 있는 것만 등록하고 나머지는 사유와 함께 돌려준다. */
+export const RegisterUnitsRequest = z.object({
+  serialNumbers: z.array(z.string().min(1).max(100)).min(1).max(5000),
+  /** 명령을 내린 운영자. 등록 사실의 처리자(source.ref)가 된다. */
+  actor: z.string().min(1).max(100),
+});
+export type RegisterUnitsRequest = z.infer<typeof RegisterUnitsRequest>;
+
+/** 기기 서버가 시리얼 목록을 페이지로 가져갈 때의 쿼리. cursor 는 이전 페이지가 준 nextCursor. */
+export const DeviceRequestUnitsQuery = z.object({
+  cursor: z.string().min(1).max(36).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(500),
+});
+export type DeviceRequestUnitsQuery = z.infer<typeof DeviceRequestUnitsQuery>;
+
+export const DeviceRequestItemResult = z.enum(['SUCCEEDED', 'FAILED']);
+export type DeviceRequestItemResult = z.infer<typeof DeviceRequestItemResult>;
+
+/** 기기 서버가 처리 결과를 돌려주는 요청. 같은 시리얼을 다시 보내면 마지막 값으로 덮어쓴다. */
+export const ReportDeviceResultsRequest = z.object({
+  items: z
+    .array(
+      z.object({
+        serialNumber: z.string().min(1).max(100),
+        result: DeviceRequestItemResult,
+        reason: z.string().max(500).optional(),
+      }),
+    )
+    .min(1)
+    .max(5000),
+});
+export type ReportDeviceResultsRequest = z.infer<typeof ReportDeviceResultsRequest>;
+export type ReportDeviceResultsInput = z.input<typeof ReportDeviceResultsRequest>;
+
+/** 우리가 기기 서버에 알리는 본문 (`POST <기기 서버>/device-requests`). 시리얼 목록은 기기 서버가 당겨 간다. */
+export const DeviceRequestNotification = z.object({
+  requestId: z.string().min(1),
+  type: DeviceRequestType,
+  count: z.number().int().min(0),
+});
+export type DeviceRequestNotification = z.infer<typeof DeviceRequestNotification>;
+
+/** 시리얼 목록 한 페이지. 마지막 페이지면 nextCursor 가 null. */
+export const DeviceRequestUnitsPage = z.object({
+  items: z.array(z.object({ serialNumber: z.string(), sku: z.string() })),
+  nextCursor: z.string().nullable(),
+});
+export type DeviceRequestUnitsPage = z.infer<typeof DeviceRequestUnitsPage>;
+
 // ---------- HTTP 응답 ----------
 
 export interface ProductView {
   sku: string;
   name: string;
+  trackingMode: TrackingMode;
 }
 export interface LocationView {
   code: string;
@@ -136,6 +219,8 @@ export interface UnitLifecycleView {
   status: UnitStatus;
   locationCode: string | null;
   orderRef: OrderRef | null;
+  /** 제품으로 등록된 시각. 등록되지 않았거나 등록 사실이 무효화되었으면 null. */
+  registeredAt: string | null;
   /** 유효한 사실들을 순서대로 놓았을 때 말이 안 되는 지점. 거부하지 않고 표시만 한다. */
   anomalies: string[];
   events: UnitEventView[];
@@ -144,7 +229,35 @@ export interface StockRow {
   sku: string;
   locationCode: string | null;
   status: UnitStatus;
+  /** 제품으로 등록되었는지(`REGISTERED` 사실이 유효한지). */
+  registered: boolean;
   quantity: number;
+}
+export interface RegisterUnitsResult {
+  /** 이번 명령으로 만든 기기 요청. 등록된 것이 하나도 없으면 null. */
+  requestId: string | null;
+  registered: string[];
+  excluded: { serialNumber: string; reason: RegistrationExclusionReason }[];
+}
+export interface DeviceRequestCounts {
+  total: number;
+  pending: number;
+  succeeded: number;
+  failed: number;
+}
+export interface DeviceRequestView {
+  id: string;
+  type: DeviceRequestType;
+  /** 요청을 만든 사실의 종류(`DOA_CONFIRMED` 등) 또는 `REGISTRATION`, `REGISTRATION_VOIDED`. */
+  reason: string;
+  createdBy: string;
+  createdAt: string;
+  notifiedAt: string | null;
+  status: DeviceRequestStatus;
+  counts: DeviceRequestCounts;
+}
+export interface DeviceRequestDetailView extends DeviceRequestView {
+  failedItems: { serialNumber: string; sku: string; reason: string | null; resultAt: string }[];
 }
 
 // ---------- 통합 이벤트 (topic: scm.unit-events) ----------
@@ -171,3 +284,12 @@ export type UnitEventVoided = z.infer<typeof UnitEventVoided>;
 
 export const ScmUnitMessage = z.discriminatedUnion('type', [UnitEventRecorded, UnitEventVoided]);
 export type ScmUnitMessage = z.infer<typeof ScmUnitMessage>;
+
+// ---------- 통합 이벤트 (topic: scm.device-requests) ----------
+
+/** 기기 요청이 만들어졌다. scm-api 자신이 받아 기기 서버에 알린다 (실패하면 재시도). */
+export const DeviceRequestCreated = defineEvent(
+  'scm.device-request.created',
+  DeviceRequestNotification,
+);
+export type DeviceRequestCreated = z.infer<typeof DeviceRequestCreated>;

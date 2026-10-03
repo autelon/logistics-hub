@@ -18,6 +18,7 @@ export class GetUnitLifecycleUsecase {
       status: unit.status,
       locationCode: lifecycle.locationCode,
       orderRef: unit.orderRef,
+      registeredAt: unit.registeredAt?.toISOString() ?? null,
       anomalies: unit.anomalies,
       events: lifecycle.events.map(({ event, locationCode, correction }) => ({
         id: event.id,

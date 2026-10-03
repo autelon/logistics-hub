@@ -48,8 +48,10 @@ const items = (order) => order.lines.flatMap((l) => l.items);
 const step = (text) => console.log(`\n▶ ${text}`);
 
 step('기준 정보: SKU 2종, 거점 3곳, 패키지 상품 1종');
-await call(SCM, '/products', { sku: 'CAM-01', name: '카메라' });
-await call(SCM, '/products', { sku: 'BAT-01', name: '배터리' });
+// 이 데모는 제품 등록(활성화)을 다루지 않는다. 등록 없이 출고해도 "미등록 개체" 이상이 붙지 않도록
+// 등록이 필요 없는 NONE 으로 둔다. 등록 흐름은 docs/playbooks/registration.md.
+await call(SCM, '/products', { sku: 'CAM-01', name: '카메라', trackingMode: 'NONE' });
+await call(SCM, '/products', { sku: 'BAT-01', name: '배터리', trackingMode: 'NONE' });
 await call(SCM, '/locations', {
   code: 'FAC-SZ',
   name: '선전 공장',

@@ -3,13 +3,14 @@
 떠 있는 시스템을 **그대로 따라 조작해서** 동작을 확인하는 절차다. 에이전트가 실행하는 것을 전제로 썼고 사람이 해도 된다.
 정책(무엇을 자동화하고 무엇을 여기서 확인하는지)은 [../testing.md](../testing.md).
 
-| 파일                                 | 다루는 것                                                                                       |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| [scm-api.md](scm-api.md)             | 기준 정보, 사실 기록과 생애주기, 재고, 정정, 에러 코드, 멱등 키, AS 이벤트 수신                 |
-| [oms-api.md](oms-api.md)             | 판매 상품, 주문 수신(패키지 풀기, 중복), 조회, SCM 이벤트 수신, DOA 교체 출고, 에러 코드        |
-| [as-api.md](as-api.md)               | 접수·판정·폐기, 접수 번호, 에러 코드, 아웃박스                                                  |
-| [web-console.md](web-console.md)     | 웹 콘솔 세 화면(제품 추적과 정정 UI, 재고, 주문)                                                |
-| [cross-service.md](cross-service.md) | 제조부터 정정·DOA·폐기·교체 출고까지 세 서비스를 가로지르는 전체 흐름, 아웃박스·Redis 전달 확인 |
+| 파일                                 | 다루는 것                                                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| [scm-api.md](scm-api.md)             | 기준 정보, 사실 기록과 생애주기, 재고, 정정, 에러 코드, 멱등 키, AS 이벤트 수신                                       |
+| [oms-api.md](oms-api.md)             | 판매 상품, 주문 수신(패키지 풀기, 중복), 조회, SCM 이벤트 수신, DOA 교체 출고, 에러 코드                              |
+| [as-api.md](as-api.md)               | 접수·판정·폐기, 접수 번호, 에러 코드, 아웃박스                                                                        |
+| [registration.md](registration.md)   | 제품 등록(제외 사유 포함), 기기 요청과 모의 기기 서버, 실패·재시도, 미등록 출고 이상, DOA·등록 무효화의 비활성화 요청 |
+| [web-console.md](web-console.md)     | 웹 콘솔 화면(제품 추적과 정정 UI, 재고, 주문, 제품 등록)                                                              |
+| [cross-service.md](cross-service.md) | 제조부터 정정·DOA·폐기·교체 출고까지 세 서비스를 가로지르는 전체 흐름, 아웃박스·Redis 전달 확인                       |
 
 각 플레이북의 기대값은 **실제로 돌려서 본 응답**이다. 기대값을 고칠 때도 실제 응답을 붙여 넣는다.
 
@@ -18,20 +19,21 @@
 1. 인프라: `colima status` 가 실패하면 `colima start`, 그다음 `mise run infra:up` (MySQL, Redis).
 2. 빌드와 마이그레이션: `mise exec -- pnpm build`, `mise exec -- pnpm db:migrate`.
 3. 서비스 기동. 두 가지 중 하나.
-   - **메인 에이전트 / 사람**: `pnpm dev` (3001·3002·3003, 웹 5173). DB 는 `lh_scm`·`lh_oms`·`lh_as`.
+   - **메인 에이전트 / 사람**: `pnpm dev` (3001·3002·3003, 모의 기기 서버 3004, 웹 5173). DB 는 `lh_scm`·`lh_oms`·`lh_as`.
    - **서브에이전트**: 공유 자원을 쓰지 않는다 (`docs/agent-workflow.md`). 자기 DB 를 만들고(`lh_<앱>_<작업>`), 자기 포트로, Redis 는 다른 논리 DB 번호(`/7` 처럼)를 써서 컨슈머 그룹이 겹치지 않게 띄운다.
      ```sh
-     # 앱마다 (scm→3101, oms→3102, as→3103 처럼 3001-3003 을 피한다)
+     # 앱마다 (scm→3101, oms→3102, as→3103 처럼 3001-3004 를 피한다)
      cd apps/scm-api
      DATABASE_URL=mysql://root:root@localhost:3306/lh_scm_<작업> mise exec -- pnpm db:migrate
      PORT=3101 DATABASE_URL=mysql://root:root@localhost:3306/lh_scm_<작업> REDIS_URL=redis://localhost:6379/7 \
        mise exec -- node dist/main.js > /tmp/scm-api.log 2>&1 &
      ```
+     제품 등록(`registration.md`)은 모의 기기 서버(`apps/device-api`)도 필요하다. scm-api 에 `DEVICE_API_URL=http://localhost:<기기 서버 포트>`, 기기 서버에 `PORT`, `HUB_URL=http://localhost:<scm 포트>`, 선택으로 `FAIL_SERIAL_SUFFIX` 를 준다 (DB 는 없다).
      끝나면 **자기 PID 만** 멈추고(`kill $(lsof -ti:3101)`) DB 를 지운다. 웹 콘솔을 다른 포트·프록시로 띄우는 방법은 [web-console.md](web-console.md).
 4. 셸 변수. 플레이북의 명령은 이 변수와 함수를 전제한다.
 
    ```sh
-   SCM=http://localhost:3001; OMS=http://localhost:3002; AS=http://localhost:3003   # 서브에이전트는 자기 포트
+   SCM=http://localhost:3001; OMS=http://localhost:3002; AS=http://localhost:3003; DEV=http://localhost:3004   # 서브에이전트는 자기 포트
    RUN=$(date +%s)   # 실행 식별자. 시리얼·주문번호에 붙여 같은 DB 에서 여러 번 돌릴 수 있게 한다
    post() { curl -s -w '\n→ %{http_code}\n' -X POST "$1" -H 'content-type: application/json' -d "$2"; }
    get()  { curl -s -w '\n→ %{http_code}\n' "$1"; }

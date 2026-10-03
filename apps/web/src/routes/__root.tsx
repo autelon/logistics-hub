@@ -2,6 +2,7 @@ import { createRootRoute, Link, Outlet } from '@tanstack/react-router';
 
 const NAV = [
   { to: '/', label: '제품 추적' },
+  { to: '/register', label: '제품 등록' },
   { to: '/stock', label: '재고' },
   { to: '/orders', label: '주문' },
 ] as const;
