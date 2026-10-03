@@ -4,6 +4,7 @@ import { MAX_ATTEMPTS, retryOnConflict } from './retry-on-conflict.js';
 
 class Conflict extends Error {}
 class Other extends Error {}
+class OtherConflict extends Error {}
 
 /** 앞의 `failures` 번은 주어진 에러로 실패하고 그다음부터 성공하는 처리. */
 const flaky = (failures: Error[]) => {
@@ -45,5 +46,27 @@ describe('retryOnConflict', () => {
     const run = flaky(failures);
     await expect(retryOnConflict(Conflict, run.attempt)).rejects.toBe(last);
     expect(run.calls()).toBe(MAX_ATTEMPTS);
+  });
+
+  it('여러 충돌 클래스를 주면 어느 쪽이든 다시 하고 시도 횟수는 합쳐서 센다', async () => {
+    const mixed = [new Conflict(), new OtherConflict(), new Conflict(), new OtherConflict()];
+    const run = flaky(mixed);
+    expect(await retryOnConflict([Conflict, OtherConflict], run.attempt)).toBe('ok after 5');
+
+    const many = Array.from({ length: MAX_ATTEMPTS + 1 }, (_, i) =>
+      i % 2 === 0 ? new Conflict() : new OtherConflict(),
+    );
+    const exhausted = flaky(many);
+    await expect(retryOnConflict([Conflict, OtherConflict], exhausted.attempt)).rejects.toBe(
+      many[MAX_ATTEMPTS - 1],
+    );
+    expect(exhausted.calls()).toBe(MAX_ATTEMPTS);
+  });
+
+  it('목록에 없는 에러는 다시 하지 않는다', async () => {
+    const error = new Other('boom');
+    const run = flaky([error]);
+    await expect(retryOnConflict([Conflict, OtherConflict], run.attempt)).rejects.toBe(error);
+    expect(run.calls()).toBe(1);
   });
 });

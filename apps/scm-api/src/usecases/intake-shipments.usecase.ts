@@ -119,7 +119,7 @@ export class IntakeShipmentsUsecase {
         throw error;
       }
     };
-    return retryOnConflict(UnitConflict, () => retryOnConflict(ShipmentConflict, attempt));
+    return retryOnConflict([ShipmentConflict, UnitConflict], attempt);
   }
 
   private async record(
