@@ -17,14 +17,14 @@
     {
       "id": "T-0002",
       "title": "업체 성과 관리가 계획 차수(06 확인 항목 16)에 주는 영향 분석",
-      "status": "in_progress",
+      "status": "done",
       "role": "procurement-expert",
       "prd": null,
       "milestone": null,
       "depends_on": ["T-0001"],
       "size": "small",
       "handoff": "handoffs/T-0002.md",
-      "updated_at": "2026-10-03T18:46:00Z",
+      "updated_at": "2026-10-03T18:58:00Z",
       "last_synced": null
     }
   ]
