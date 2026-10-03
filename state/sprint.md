@@ -1,11 +1,11 @@
 # 현재 스프린트
 
-아직 시작 전. autelon 도입(2026-10-04)만 끝났다.
-
 ## 다음 director에게
 
 - 작업 방식은 혼합이다(`CLAUDE.md` "autelon 운영"). 코드 작업은 `docs/agent-workflow.md` 를 따른다.
-- `docs/goals.md` 의 지표가 비어 있다. 첫 PRD 전에 `strategist` 에 목표·지표 체계 제안을 맡긴다.
-- autelon 플러그인의 `playbooks/first-run.md`(role 인식, 승인 루프, finance, notion-sync 확인)를 아직 돌리지 않았다.
-- 장기 방향(모듈형 제품)은 미결정이다. 분석은 `strategist`·`architect`·도메인 전문가 role 에 맡기고 선택지를 사용자에게 낸다.
-- 구현 순서상 다음은 `docs/06-inbound-design.md` 의 5b(운송 서류·컨테이너·운송 진행·정정)다.
+- first-run 점검은 끝났다(`docs/first-run.md`).
+- 목표 지표가 정해졌다(`docs/goals.md`, T-0001). 목표값은 업체 데이터가 들어온 뒤 기준선을 재고 정한다.
+- 사람에게 확인을 요청해 둔 것: 시스템 사용 전 재고가 있는지(물류·구매 담당자), 3PL 이 출고 요청마다 출고 완료를 돌려주는지(3PL 운영 담당자). 근거는 `handoffs/T-0001.md` "사람에게 묻기".
+- 다음 후보: `procurement-expert` 에 업체 성과 관리가 계획 차수(`docs/06` 확인 항목 16)에 주는 영향 분석, `da` 에 지표 계산식 정의, 구현 순서상 다음인 `docs/06` 5b.
+- 장기 방향(모듈형 제품)은 미결정이다.
+- 기록 규칙: 결정 기록에는 사람이 정한 것만 둔다. 리뷰·보안 검토 결과는 PR 코멘트가 기록이고 그 handoff 는 커밋하지 않는다.
