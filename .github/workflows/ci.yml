@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # 머지 큐가 최신 main 과 합친 임시 브랜치에서 필수 검사를 다시 돌린다. 이 트리거가 없으면 큐가 결과를 기다리다 실패한다.
+  merge_group:
 
 jobs:
-  # 이 job 이름(check)이 main 병합의 필수 조건이다. 이름을 바꾸면 GitHub 의 main 규칙(필수 검사)도 같이 바꿔야 한다.
+  # 이 job 이름(check)과 git-policy / merge-commits 가 main 병합의 필수 조건이다. 이름을 바꾸면 GitHub 의 main 규칙(필수 검사)도 같이 바꿔야 한다.
   check:
     runs-on: ubuntu-latest
     services:
@@ -36,3 +38,6 @@ jobs:
         env:
           # 테스트가 이 이름의 DB 를 만들고 지운다. 이름은 _test 로 끝나야 한다.
           TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/lh_messaging_test
+  # autelon 조직 공통 규칙: PR 에 merge 커밋이 있으면 실패한다 (작업 브랜치는 rebase 로만 최신화).
+  git-policy:
+    uses: autelon/.github/.github/workflows/git-policy.yml@main
