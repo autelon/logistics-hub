@@ -15,15 +15,17 @@
 
 ### 테이블
 
-| 테이블                   | 내용                                                                               |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `products`               | SKU 기준 정보. `sku` 는 unique 코드, `tracking_mode`(SERIAL·LOT·NONE, 기본 SERIAL) |
-| `locations`              | 재고가 있을 수 있는 거점 (공장·창고·서비스센터)과 운영 업체. `code` 는 unique      |
-| `units`                  | 물리 제품 한 개. 현재 상태·위치·주문·`registered_at` 은 **이력에서 계산한 캐시**   |
-| `unit_events`            | 제품에 일어난 사실. **추가만 한다**                                                |
-| `unit_event_corrections` | 정정 기록. 어떤 사실을 무효로 하고 무엇으로 대체했는지, 사유, 처리자               |
-| `device_requests`        | 기기 서버에 보내는 요청(`REGISTER`·`DEACTIVATE`). 상태는 저장하지 않고 계산한다    |
-| `device_request_items`   | 요청에 딸린 시리얼과 시리얼별 처리 결과. `(request_id, unit_id)` unique            |
+| 테이블                    | 내용                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `products`                | SKU 기준 정보. `sku` 는 unique 코드, `tracking_mode`(SERIAL·LOT·NONE, 기본 SERIAL) |
+| `locations`               | 재고가 있을 수 있는 거점 (공장·창고·서비스센터)과 운영 업체. `code` 는 unique      |
+| `location_policies`       | 거점의 능력 프로필 (거점당 한 행, 없어도 된다). 아래 "거점 능력 프로필"            |
+| `location_policy_changes` | 프로필 변경 이력. 추가만 한다                                                      |
+| `units`                   | 물리 제품 한 개. 현재 상태·위치·주문·`registered_at` 은 **이력에서 계산한 캐시**   |
+| `unit_events`             | 제품에 일어난 사실. **추가만 한다**                                                |
+| `unit_event_corrections`  | 정정 기록. 어떤 사실을 무효로 하고 무엇으로 대체했는지, 사유, 처리자               |
+| `device_requests`         | 기기 서버에 보내는 요청(`REGISTER`·`DEACTIVATE`). 상태는 저장하지 않고 계산한다    |
+| `device_request_items`    | 요청에 딸린 시리얼과 시리얼별 처리 결과. `(request_id, unit_id)` unique            |
 
 ### 사실(unit event)의 종류와 상태 변화
 
@@ -63,6 +65,22 @@
 - 정정 후 제품 상태를 처음부터 다시 계산하고, 다른 서비스에 `event-voided` → `event-recorded` 순으로 알린다.
 
 시리얼을 잘못 찍은 경우(실제로는 다른 제품이 나감)는 "틀린 제품의 출고를 무효화" + "맞는 제품의 출고를 기록" 두 단계다.
+
+### 거점 능력 프로필
+
+거점(창고·서비스센터·공장)마다 "무엇을 보고해 주는가, 무엇을 정하는가"를 값으로 둔다. 파트너와의 계약이나 운영이 바뀌면 코드가 아니라 이 값을 고친다.
+각 항목의 뜻과 쓰이는 곳은 [06-inbound-design.md](06-inbound-design.md) "정책 변경 지점". 지금은 값을 저장하고 보여 줄 뿐 아직 읽어서 동작을 바꾸는 코드는 없다.
+
+| 항목                                                                                             | 기본값    |
+| ------------------------------------------------------------------------------------------------ | --------- |
+| `reportsSerialsOnReceipt` `reportsSerialsOnShipment` `reportsSerialsOnOutbound`                  | 참        |
+| `reportsInspectionResult` `decidesDisposition` `requiresHubConfirmation` `autoRegisterOnPutaway` | 거짓      |
+| `unitReceiptTrigger` (`GOODS_RECEIPT` / `PUTAWAY`)                                               | `PUTAWAY` |
+
+- **행이 없는 거점은 기본값으로 동작한다.** 거점을 만들 때 행을 만들지 않고, 처음 바꿀 때 모든 값을 채워 만든다. 기본값은 DB 가 아니라 순수 함수 `resolvePolicy` (`location-policy.ts`)가 정한다. 기본값은 오늘의 운영(사용자 확인 2026-10-03)이다.
+- `LocationView.policy` 는 해석된 값이라 항상 있다. 변경은 `PUT /locations/:code/policy` (보낸 항목만 바뀐다, `actor` 필수, 하나 이상 필요, 모르는 항목은 거절). 응답은 해석된 프로필이다.
+- 변경은 `location_policy_changes` 에 `actor`, 시각, 기본값이 채워진 `before`·`after` 로 남고 `GET /locations/:code/policy/changes` 가 최신순 50건을 돌려준다. 바뀌는 것이 없는 요청은 행도 이력도 만들지 않는다. 같은 거점의 동시 변경은 거점 행을 잠가 직렬화한다.
+- 거점을 다시 등록(`POST /locations`)해도 프로필은 그대로다.
 
 ### 재고
 

@@ -47,7 +47,7 @@ post $SCM/locations '{"code":"FAC-SZ","name":"선전 공장","type":"FACTORY","p
 post $SCM/locations '{"code":"WH-ICN","name":"인천 창고","type":"WAREHOUSE","partner":"3PL B"}'
 ```
 
-기대: 보낸 본문 그대로 → 201, 201
+기대: 보낸 본문에 기본 `policy` 가 붙은 모양 ([scm-api.md](scm-api.md) 6 과 같다) → 201, 201
 
 ### 3. 개체를 만든다 — 입고된 6개, 실패용 1개, 비교용 3개
 

@@ -68,6 +68,17 @@ export class DrizzleCatalogRepository implements CatalogRepository {
     return row;
   }
 
+  async findLocationByCodeForUpdate(code: string): Promise<Location | undefined> {
+    const [row] = await this.db
+      .get()
+      .select()
+      .from(locations)
+      .where(eq(locations.code, code))
+      .limit(1)
+      .for('update');
+    return row;
+  }
+
   async findLocationById(id: string): Promise<Location | undefined> {
     const [row] = await this.db.get().select().from(locations).where(eq(locations.id, id)).limit(1);
     return row;
