@@ -108,6 +108,9 @@ const UnitLifecycle = ({ serialNumber }: { serialNumber: string }) => {
           <span className="text-slate-500">SKU {unit.sku}</span>
           {unit.locationCode && <span className="text-slate-500">거점 {unit.locationCode}</span>}
           {unit.orderRef && <span className="text-slate-500">주문 {unit.orderRef.orderId}</span>}
+          <span className="text-slate-500">
+            {unit.registeredAt ? `등록 ${formatDateTime(unit.registeredAt)}` : '미등록'}
+          </span>
         </div>
         {unit.anomalies.length > 0 && (
           <ul className="mt-3 space-y-1 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
