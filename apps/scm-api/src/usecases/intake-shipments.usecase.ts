@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type {
   IntakeShipmentsRequest,
@@ -64,12 +64,15 @@ const isConcurrencyConflict = (error: unknown): boolean =>
         message.endsWith(`${UNIT_SERIAL_UNIQUE}'`)),
   );
 
-const retryOnConflict = async <T>(attempt: () => Promise<T>): Promise<T> => {
+const retryOnConflict = async <T>(attempt: () => Promise<T>, log: Logger): Promise<T> => {
   for (let attempts = 1; ; attempts += 1) {
     try {
       return await attempt();
     } catch (error) {
       if (!isConcurrencyConflict(error) || attempts >= MAX_ATTEMPTS) throw error;
+      log.warn(
+        `Shipment intake lost a race with a concurrent request; retrying (attempt ${attempts + 1})`,
+      );
     }
   }
 };
@@ -118,6 +121,8 @@ interface Planned {
  */
 @Injectable()
 export class IntakeShipmentsUsecase {
+  private readonly logger = new Logger(IntakeShipmentsUsecase.name);
+
   constructor(
     @Inject(TransactionRunner) private readonly tx: TransactionRunner,
     private readonly catalog: CatalogService,
@@ -145,8 +150,9 @@ export class IntakeShipmentsUsecase {
     const purchaseOrderIds = await this.purchaseOrders.idsOf(items.map((item) => item.poNumber));
 
     // 처음부터 다시 하는 단위는 트랜잭션을 여닫는 것까지다 (안에서 부르면 run 이 합류해 소용없다).
-    return retryOnConflict(() =>
-      this.tx.run(() => this.record(items, products, [...purchaseOrderIds.values()])),
+    return retryOnConflict(
+      () => this.tx.run(() => this.record(items, products, [...purchaseOrderIds.values()])),
+      this.logger,
     );
   }
 
