@@ -1,6 +1,6 @@
 # 웹 콘솔 플레이북
 
-브라우저로 네 화면(제품 추적, 재고, 주문, 제품 등록)을 확인한다. 에이전트는 **Claude in Chrome** 으로 조작하고, 화면 내용은 페이지 텍스트(접근성 트리)로 읽어 비교한다. 스크린샷은 보조다.
+브라우저로 다섯 화면(제품 추적, 재고, 주문, 제품 등록, 발주)을 확인한다. 에이전트는 **Claude in Chrome** 으로 조작하고, 화면 내용은 페이지 텍스트(접근성 트리)로 읽어 비교한다. 스크린샷은 보조다.
 데이터는 [scm-api.md](scm-api.md) 1–28 과 [oms-api.md](oms-api.md) 1–17 을 같은 `RUN` 으로 먼저 돌려 만든다.
 
 ## 준비
@@ -98,3 +98,30 @@ for s in UI-1-$RUN UI-2-$RUN-FAIL UI-3-$RUN; do receive $s CAM-01; done
 
 - `/stock`: 6 뒤에 인천 창고 `IN_STOCK` 행이 `미등록` 과 `등록` 배지로 나뉘어 보인다 (registration.md 3·5·6 과 6 을 모두 한 DB 에 했다면 `CAM-01 WH-ICN IN_STOCK 등록` 에 등록된 개체 수가 모인다).
 - `/?sn=REG-A-<RUN>` (registration.md 13–14 뒤): 머리에 `DELIVERED`, `SKU CAM-01`, `주문 ORDER-<RUN>`, `등록 <시각>`. 이력에 `REGISTERED` 줄(`출처 logistics-hub`)이 있고 `잘못된 기록으로 표시` 버튼이 있다 — 눌러서 무효화하면 registration.md 15 와 같이 `registeredAt` 이 비워지고 DEACTIVATE 요청이 생긴다.
+
+### 8. 발주 목록과 상세
+
+데이터는 [procurement.md](procurement.md) 1–19 로 만든다 (빈 DB 의 발주 번호 기준). 개발 서버의 `/api/scm` 이 그 scm-api 를 가리켜야 한다.
+
+1. `/purchase-orders` — 내비게이션에 `발주` 가 있고 현재 항목으로 굵게 보인다. 카드 `최근 발주 50건` 의 표 머리: `발주 번호` `공급처` `발주일` `상태` `입고 거점` `줄` `수량`. 최근 순 5줄 :
+
+   ```
+   PO-2026-000004 D 2026-10-04 ISSUED WH-ICN 1 10
+   PO-2026-000005 E 2026-10-04 DRAFT WH-ICN 1 10
+   PO-2026-000003 GAMMA 2026-10-04 CANCELLED WH-ICN 2 14
+   PO-2026-000002 BETA 2026-10-04 CANCELLED WH-ICN 1 10
+   PO-2026-000001 ACME Shenzhen Ltd 2026-10-04 ISSUED WH-ICN 2 140
+   ```
+
+   (`PO-2026-000001` 은 줄 1 이 120, 줄 3 이 20 이고 취소한 줄 2 는 빠져 수량 140.) 발주 번호는 링크다.
+
+2. `PO-2026-000001` 링크를 누른다 → `/purchase-orders/PO-2026-000001`. 기대 화면 (페이지 텍스트 순서대로):
+   - 머리: `PO-2026-000001`, 배지 `ISSUED`, 링크 `목록`. 항목: 공급처 `ACME Shenzhen Ltd`, 발주일 · 통화 `2026-10-04 · USD`, 입고 거점 `WH-ICN`, 인도 조건 `—`, 결제 조건 `T/T 30%`, 작성 `buyer-1 · <시각>`, 발행 `buyer-1 · <시각>`.
+   - 카드 `발주 줄` (머리 `줄 SKU 주문 받음 남음 납기 진행 닫음 사유`):
+     ```
+     1 CAM-01 120 0 0 2026-12-01 CLOSED_SHORT buyer-1: 제조사가 100개까지만 공급
+     2 LENS-01 50 0 0 2026-11-30 CANCELLED          (흐리게)
+     3 LENS-01 20 0 20 2026-12-15 OPEN
+     ```
+   - 카드 `개정 이력`: `<시각> buyer-2 — 제조사 증량 요청` 한 줄.
+3. 목록의 `목록` 링크로 돌아가면 1 과 같은 표가 보인다.

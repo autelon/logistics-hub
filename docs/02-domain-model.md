@@ -15,18 +15,21 @@
 
 ### 테이블
 
-| 테이블                    | 내용                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| `products`                | SKU 기준 정보. `sku` 는 unique 코드, `tracking_mode`(SERIAL·LOT·NONE, 기본 SERIAL) |
-| `locations`               | 재고가 있을 수 있는 거점 (공장·창고·서비스센터)과 운영 업체. `code` 는 unique      |
-| `location_policies`       | 거점의 능력 프로필 (거점당 한 행, 없어도 된다). 아래 "거점 능력 프로필"            |
-| `location_policy_changes` | 프로필 변경 이력. 추가만 한다                                                      |
-| `units`                   | 물리 제품 한 개. 현재 상태·위치·주문·`registered_at` 은 **이력에서 계산한 캐시**   |
-| `unit_events`             | 제품에 일어난 사실. **추가만 한다**                                                |
-| `unit_event_corrections`  | 정정 기록. 어떤 사실을 무효로 하고 무엇으로 대체했는지, 사유, 처리자               |
-| `stock_movements`         | 시리얼 없는(LOT·NONE) 제품의 수량 이동. **추가만 한다**. 아래 "수량 원장"          |
-| `device_requests`         | 기기 서버에 보내는 요청(`REGISTER`·`DEACTIVATE`). 상태는 저장하지 않고 계산한다    |
-| `device_request_items`    | 요청에 딸린 시리얼과 시리얼별 처리 결과. `(request_id, unit_id)` unique            |
+| 테이블                     | 내용                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| `products`                 | SKU 기준 정보. `sku` 는 unique 코드, `tracking_mode`(SERIAL·LOT·NONE, 기본 SERIAL)     |
+| `locations`                | 재고가 있을 수 있는 거점 (공장·창고·서비스센터)과 운영 업체. `code` 는 unique          |
+| `location_policies`        | 거점의 능력 프로필 (거점당 한 행, 없어도 된다). 아래 "거점 능력 프로필"                |
+| `location_policy_changes`  | 프로필 변경 이력. 추가만 한다                                                          |
+| `units`                    | 물리 제품 한 개. 현재 상태·위치·주문·`registered_at` 은 **이력에서 계산한 캐시**       |
+| `unit_events`              | 제품에 일어난 사실. **추가만 한다**                                                    |
+| `unit_event_corrections`   | 정정 기록. 어떤 사실을 무효로 하고 무엇으로 대체했는지, 사유, 처리자                   |
+| `stock_movements`          | 시리얼 없는(LOT·NONE) 제품의 수량 이동. **추가만 한다**. 아래 "수량 원장"              |
+| `device_requests`          | 기기 서버에 보내는 요청(`REGISTER`·`DEACTIVATE`). 상태는 저장하지 않고 계산한다        |
+| `device_request_items`     | 요청에 딸린 시리얼과 시리얼별 처리 결과. `(request_id, unit_id)` unique                |
+| `purchase_orders`          | 우리가 제조사에 내는 발주서. `po_number` 는 허브가 채번(`PO-2026-000001`). 아래 "발주" |
+| `purchase_order_lines`     | 발주 줄. `(purchase_order_id, line_no)` unique                                         |
+| `purchase_order_revisions` | 발행 뒤 변경의 이력. 변경 전후 전체 스냅샷. 추가만 한다                                |
 
 ### 사실(unit event)의 종류와 상태 변화
 
@@ -107,6 +110,33 @@
   정정 시각이 `occurred_at`, 출처는 `logistics-hub:correction`(`source_ref` = 처리자), `note` 에 사유와 처리자. 이미 되돌렸으면 `MOVEMENT_ALREADY_REVERSED`(409), 없는 이동은 `MOVEMENT_NOT_FOUND`(404).
   역분개도 이동이라 한 번 되돌릴 수 있다 (원래 효과가 돌아온다). 원래 이동 행을 잠근 뒤 정정 여부를 읽어 동시 정정을 줄 세운다.
 - **재고 = 들어온 합 - 나간 합.** 이동 하나는 도착지에 `+수량`, 출발지에 `-수량`이다 (`ledgerEntries`).
+
+### 발주 (`procurement`)
+
+우리가 내는 구매 주문. 업체가 보고한 사실이 아니라 **우리가 만든 문서이고 우리가 내리는 명령**이라, 전제가 맞지 않으면 에러 코드로 거절한다(`PO_*`, `UNKNOWN_SKU`, `UNKNOWN_LOCATION`). 설계 근거와 남은 구현은 [06-inbound-design.md](06-inbound-design.md).
+
+| 항목             | 규칙                                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 상태             | `DRAFT` → `ISSUED` → (`CANCELLED`). 초안은 `PUT` 으로 자유롭게 고치고 이력을 남기지 않는다. 발행 뒤의 변경은 개정(`revisions`)으로만 하고 변경 전후 전체가 이력에 남는다                                                        |
+| 번호             | `po_number` 는 repository 가 저장할 때 `nextPublicId` 로 채번한다 (`PO-<UTC 연도>-<6자리>`)                                                                                                                                     |
+| 날짜             | 발주일과 요청 납기는 달력 날짜(`YYYY-MM-DD`)다. 시각이 아니다                                                                                                                                                                   |
+| 줄               | 제품은 `product_id` 로 참조한다. 줄 번호는 배열 순서대로 1부터 붙고 취소한 줄 것도 다시 쓰지 않는다. 취소한 줄은 `cancelled` 로 남는다                                                                                          |
+| 줄 완료          | **저장하지 않고 계산한다** (`purchase-order-completion.ts`). 받은 누계가 `주문×(1+과납 허용)` 초과면 `OVER`, `주문×(1−미납 허용)` 이상이면 `COMPLETE`, 덜 왔는데 닫았으면 `CLOSED_SHORT`, 아니면 `OPEN`. 허용률이 비어 있으면 0 |
+| 줄 닫기          | `closed` 는 "더 안 들어온다"는 미달 납품 선언이다 (`closed_at/by/reason`). 닫을 수 있는 줄은 `OPEN` 뿐이다. 이미 닫은 줄은 `PO_LINE_ALREADY_CLOSED`(409)                                                                        |
+| 개정             | 줄의 수량·납기·단가·허용률 변경, 줄 추가, 줄 취소. 주문 수량을 받은 수량 아래로 줄이거나 받은 것이 있는 줄을 취소하면 `PO_QTY_BELOW_RECEIVED`. 바뀐 것이 없으면 이력을 남기지 않는다                                            |
+| 취소된 발주의 줄 | 줄을 따로 취소하지 않았어도 진행 상태는 `CANCELLED`(`openQty` 0)로 계산한다                                                                                                                                                     |
+| 발주 취소        | 받은 것이 없을 때만 (`PO_HAS_RECEIPTS`). 발행된 발주의 취소는 개정 이력에 남고, 초안의 취소는 남기지 않는다                                                                                                                     |
+| 받은 수량        | 입고·선적이 아직 없어 항상 0 이다 (`received-quantity.ts` 임시 구현, 5·6단계에서 교체). 서비스는 usecase 가 넘기는 조회 함수로 받으므로 도메인끼리 서로를 참조하지 않는다                                                       |
+
+| 메서드·경로                                                                | 내용                                             |
+| -------------------------------------------------------------------------- | ------------------------------------------------ |
+| `POST /purchase-orders`                                                    | 초안을 만든다 (SKU·거점이 등록되어 있어야 한다)  |
+| `PUT /purchase-orders/:poNumber`                                           | 초안을 통째로 바꾼다 (`PO_NOT_DRAFT`)            |
+| `POST /purchase-orders/:poNumber/issue`                                    | 발행 (`PO_NOT_DRAFT`)                            |
+| `POST /purchase-orders/:poNumber/revisions`                                | 발행 뒤 개정 (`PO_NOT_ISSUED`)                   |
+| `POST /purchase-orders/:poNumber/lines/:lineNo/close`                      | 줄 닫기                                          |
+| `POST /purchase-orders/:poNumber/cancel`                                   | 발주 취소                                        |
+| `GET /purchase-orders`, `GET .../:poNumber`, `GET .../:poNumber/revisions` | 최근 50건, 줄별 진행 상태가 붙은 상세, 개정 이력 |
 
 ### 재고
 
