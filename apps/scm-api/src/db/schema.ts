@@ -2,6 +2,8 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  date,
+  decimal,
   index,
   int,
   json,
@@ -11,6 +13,7 @@ import {
   type AnyMySqlColumn,
 } from 'drizzle-orm/mysql-core';
 
+import type { PurchaseOrderStatus } from '@repo/contracts/procurement';
 import type {
   DeviceRequestItemResult,
   DeviceRequestType,
@@ -25,8 +28,11 @@ import type {
 } from '@repo/contracts/scm';
 import { idColumn, utcDateTime } from '@repo/db-kit/columns';
 import { outboxEvents } from '@repo/db-kit/outbox';
+import { publicIdColumn, publicIdCounters } from '@repo/db-kit/public-id';
 
-export { outboxEvents };
+import type { PurchaseOrderSnapshot } from '../domains/procurement/domain/purchase-order.js';
+
+export { outboxEvents, publicIdCounters };
 
 export const products = mysqlTable('products', {
   id: idColumn().primaryKey(),
@@ -228,4 +234,85 @@ export const stockMovements = mysqlTable(
       sql`${t.fromLocationId} is not null or ${t.toLocationId} is not null`,
     ),
   ],
+);
+
+/**
+ * 우리가 제조사에 내는 발주서. 사실이 아니라 우리가 만든 문서라 고칠 수 있다.
+ * 진행도(받은 수량, 완료 여부)는 저장하지 않고 입고·선적 기록에서 계산한다.
+ * 발행(ISSUED) 뒤의 변경은 purchase_order_revisions 에 남는다.
+ */
+export const purchaseOrders = mysqlTable(
+  'purchase_orders',
+  {
+    id: idColumn().primaryKey(),
+    /** 허브가 채번하는 번호(`PO-2026-000001`). */
+    poNumber: publicIdColumn().notNull().unique(),
+    supplier: varchar({ length: 200 }).notNull(),
+    /** 달력 날짜. 시각이 아니므로 시간대 변환을 받지 않게 문자열(`YYYY-MM-DD`)로 다룬다. */
+    orderDate: date({ mode: 'string' }).notNull(),
+    status: varchar({ length: 16 }).$type<PurchaseOrderStatus>().notNull(),
+    currency: varchar({ length: 3 }).notNull(),
+    destinationLocationId: idColumn()
+      .notNull()
+      .references(() => locations.id),
+    incoterm: varchar({ length: 8 }),
+    incotermPlace: varchar({ length: 100 }),
+    supplierOrderRef: varchar({ length: 100 }),
+    paymentTerms: varchar({ length: 200 }),
+    remarks: varchar({ length: 1000 }),
+    createdAt: utcDateTime().notNull(),
+    createdBy: varchar({ length: 100 }).notNull(),
+    issuedAt: utcDateTime(),
+    issuedBy: varchar({ length: 100 }),
+  },
+  (t) => [index('purchase_orders_recent_idx').on(t.createdAt)],
+);
+
+export const purchaseOrderLines = mysqlTable(
+  'purchase_order_lines',
+  {
+    id: idColumn().primaryKey(),
+    purchaseOrderId: idColumn()
+      .notNull()
+      .references(() => purchaseOrders.id),
+    lineNo: int().notNull(),
+    productId: idColumn()
+      .notNull()
+      .references(() => products.id),
+    orderedQty: int().notNull(),
+    requestedDeliveryDate: date({ mode: 'string' }).notNull(),
+    /** 1개 기준 단가. 통화는 발주 헤더의 currency. */
+    unitPrice: decimal({ precision: 18, scale: 4, mode: 'number' }),
+    /** 과납·미납 허용률(%). 비어 있으면 허용 없음(0)으로 계산한다. */
+    overTolerancePct: decimal({ precision: 5, scale: 2, mode: 'number' }),
+    underTolerancePct: decimal({ precision: 5, scale: 2, mode: 'number' }),
+    /** "더 안 들어온다"는 선언(미달 납품). 완료 여부가 아니다 — 완료는 받은 누계에서 계산한다. */
+    closed: boolean().notNull(),
+    closedAt: utcDateTime(),
+    closedBy: varchar({ length: 100 }),
+    closeReason: varchar({ length: 500 }),
+    /** 개정으로 취소한 줄. 줄 번호는 재사용하지 않으므로 행을 지우지 않는다. */
+    cancelled: boolean().notNull(),
+  },
+  (t) => [
+    unique('purchase_order_lines_po_line_uq').on(t.purchaseOrderId, t.lineNo),
+    index('purchase_order_lines_product_idx').on(t.productId),
+  ],
+);
+
+/** 발행 뒤의 변경 이력. 추가만 한다. before·after 는 변경 전후의 상태와 줄 전체다. */
+export const purchaseOrderRevisions = mysqlTable(
+  'purchase_order_revisions',
+  {
+    id: idColumn().primaryKey(),
+    purchaseOrderId: idColumn()
+      .notNull()
+      .references(() => purchaseOrders.id),
+    revisedAt: utcDateTime().notNull(),
+    actor: varchar({ length: 100 }).notNull(),
+    reason: varchar({ length: 500 }).notNull(),
+    before: json().$type<PurchaseOrderSnapshot>().notNull(),
+    after: json().$type<PurchaseOrderSnapshot>().notNull(),
+  },
+  (t) => [index('purchase_order_revisions_po_idx').on(t.purchaseOrderId, t.revisedAt)],
 );
