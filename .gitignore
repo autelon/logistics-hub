@@ -4,6 +4,7 @@ dist
 *.tsbuildinfo
 .env
 .env.*
+.env*
 !.env.example
 coverage
 .DS_Store
@@ -12,3 +13,7 @@ coverage
 notion/
 local/
 state/quota.json
+# autelon: role 메모리와 개인 설정도 로컬에만 둔다 (내용을 미리 알 수 없고 public 저장소다)
+.claude/agent-memory/
+.claude/agent-memory-local/
+.claude/settings.local.json
