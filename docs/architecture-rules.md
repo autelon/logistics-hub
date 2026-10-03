@@ -188,7 +188,8 @@ execute(message: { id: string; event: DoaConfirmed }) {
 
 - `domain` 의 순수 함수는 반드시 단위 테스트한다. 파일 옆에 `*.spec.ts`.
 - `application` 은 repository 인터페이스의 메모리 구현으로 DB 없이 테스트할 수 있다.
-- DB 와 이벤트를 거치는 흐름은 `mise run demo` 로 확인한다.
+- 그 위(usecase 의 트랜잭션, infra 쿼리, presentation 의 HTTP·이벤트)는 테스트 코드를 두지 않고 [testing.md](testing.md) 의 정책대로 플레이북([playbooks/](playbooks/README.md))을 실제로 돌려 확인한다.
+  presentation 을 추가·변경하는 PR 은 해당 플레이북 단계를 같이 추가·수정한다.
 
 ## 기능을 추가하는 순서
 
