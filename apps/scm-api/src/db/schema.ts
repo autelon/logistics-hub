@@ -1,11 +1,13 @@
-import { index, json, mysqlTable, unique, varchar } from 'drizzle-orm/mysql-core';
+import { boolean, index, json, mysqlTable, unique, varchar } from 'drizzle-orm/mysql-core';
 
 import type {
   DeviceRequestItemResult,
   DeviceRequestType,
+  LocationPolicy,
   LocationType,
   TrackingMode,
   UnitEventType,
+  UnitReceiptTrigger,
   UnitStatus,
 } from '@repo/contracts/scm';
 import { idColumn, utcDateTime } from '@repo/db-kit/columns';
@@ -31,6 +33,44 @@ export const locations = mysqlTable('locations', {
   partner: varchar({ length: 100 }).notNull(),
   createdAt: utcDateTime().notNull(),
 });
+
+/**
+ * 거점의 능력 프로필(1:1). 행이 없으면 기본값으로 동작하므로 거점마다 있어야 하는 것은 아니다.
+ * 기본값은 DB 가 아니라 도메인(resolvePolicy)이 정한다. 행은 처음 바꿀 때 모든 값을 채워 만든다.
+ */
+export const locationPolicies = mysqlTable('location_policies', {
+  id: idColumn().primaryKey(),
+  locationId: idColumn()
+    .notNull()
+    .unique()
+    .references(() => locations.id),
+  reportsSerialsOnReceipt: boolean().notNull(),
+  reportsSerialsOnShipment: boolean().notNull(),
+  reportsSerialsOnOutbound: boolean().notNull(),
+  reportsInspectionResult: boolean().notNull(),
+  decidesDisposition: boolean().notNull(),
+  requiresHubConfirmation: boolean().notNull(),
+  unitReceiptTrigger: varchar({ length: 32 }).$type<UnitReceiptTrigger>().notNull(),
+  autoRegisterOnPutaway: boolean().notNull(),
+  updatedAt: utcDateTime().notNull(),
+  updatedBy: varchar({ length: 100 }).notNull(),
+});
+
+/** 능력 프로필 변경 이력. 추가만 한다. before·after 는 기본값이 채워진 전체 값이다. */
+export const locationPolicyChanges = mysqlTable(
+  'location_policy_changes',
+  {
+    id: idColumn().primaryKey(),
+    locationId: idColumn()
+      .notNull()
+      .references(() => locations.id),
+    actor: varchar({ length: 100 }).notNull(),
+    changedAt: utcDateTime().notNull(),
+    before: json().$type<LocationPolicy>().notNull(),
+    after: json().$type<LocationPolicy>().notNull(),
+  },
+  (t) => [index('location_policy_changes_location_idx').on(t.locationId, t.changedAt)],
+);
 
 /**
  * 물리 제품 한 개. status 이하의 컬럼은 unit_events 를 접어서 만든 "현재 상태" 캐시이며

@@ -61,6 +61,32 @@ export const DeviceRequestStatus = z.enum([
   'PARTIALLY_FAILED', // 모두 처리되었고 실패가 있음
 ]);
 export type DeviceRequestStatus = z.infer<typeof DeviceRequestStatus>;
+/** 시리얼을 주지 않는 파트너의 개체를 "창고에 들어옴"으로 볼 단계. */
+export const UnitReceiptTrigger = z.enum(['GOODS_RECEIPT', 'PUTAWAY']);
+export type UnitReceiptTrigger = z.infer<typeof UnitReceiptTrigger>;
+
+/**
+ * 거점(파트너)의 능력 프로필: 무엇을 보고해 주고 무엇을 정하는가. 정책은 코드가 아니라 이 값이다.
+ * 행이 없는 거점은 기본값(오늘의 운영)으로 동작한다. 의미는 docs/06-inbound-design.md.
+ */
+export const LocationPolicy = z.object({
+  /** 입고 때 시리얼 목록을 준다. */
+  reportsSerialsOnReceipt: z.boolean(),
+  /** 출하(선적) 때 시리얼 목록을 준다. 공장에서 의미가 있다. */
+  reportsSerialsOnShipment: z.boolean(),
+  /** 출고 때 시리얼을 스캔해 준다. */
+  reportsSerialsOnOutbound: z.boolean(),
+  /** 검수 결과를 값(양품·불량·보류)으로 준다. */
+  reportsInspectionResult: z.boolean(),
+  /** 처분을 이 파트너가 정한다. */
+  decidesDisposition: z.boolean(),
+  /** 파트너 판정을 우리가 확정해야 실행으로 본다. */
+  requiresHubConfirmation: z.boolean(),
+  unitReceiptTrigger: UnitReceiptTrigger,
+  /** 적치 사실이 들어오면 제품 등록을 자동으로 실행한다. */
+  autoRegisterOnPutaway: z.boolean(),
+});
+export type LocationPolicy = z.infer<typeof LocationPolicy>;
 
 // ---------- 에러 코드 ----------
 
@@ -93,6 +119,15 @@ export const RegisterLocationRequest = z.object({
   partner: z.string().min(1).max(100),
 });
 export type RegisterLocationRequest = z.infer<typeof RegisterLocationRequest>;
+
+/** 능력 프로필 변경. 보낸 항목만 바뀌고, 하나 이상 있어야 한다. 모르는 항목은 오타일 수 있어 거절한다. */
+export const UpdateLocationPolicyRequest = LocationPolicy.partial()
+  .extend({ actor: z.string().min(1).max(100) })
+  .strict()
+  .refine((body) => Object.keys(body).some((key) => key !== 'actor'), {
+    message: 'At least one policy field is required',
+  });
+export type UpdateLocationPolicyRequest = z.infer<typeof UpdateLocationPolicyRequest>;
 
 /** 업체(또는 연동 어댑터)가 보고하는 사실 한 건. */
 export const RecordUnitEventRequest = z.object({
@@ -193,6 +228,16 @@ export interface LocationView {
   name: string;
   type: LocationType;
   partner: string;
+  /** 능력 프로필. 저장된 행이 없으면 기본값이 채워져 있다. */
+  policy: LocationPolicy;
+}
+/** 능력 프로필 변경 이력 한 건. before·after 는 기본값이 채워진 값이다. */
+export interface LocationPolicyChangeView {
+  id: string;
+  actor: string;
+  changedAt: string;
+  before: LocationPolicy;
+  after: LocationPolicy;
 }
 export interface UnitEventView {
   id: string;

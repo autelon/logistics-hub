@@ -50,6 +50,9 @@ export class MemoryCatalogRepository implements CatalogRepository {
   findLocationByCode() {
     return Promise.resolve(undefined);
   }
+  findLocationByCodeForUpdate() {
+    return Promise.resolve(undefined);
+  }
   findLocationById() {
     return Promise.resolve(undefined);
   }

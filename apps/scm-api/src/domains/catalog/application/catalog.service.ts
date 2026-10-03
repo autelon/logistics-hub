@@ -48,12 +48,24 @@ export class CatalogService {
     return new Map(found.map((product) => [product.id, product]));
   }
 
-  /** 거점 코드를 해석한다. 코드가 없으면(null) 거점 없는 사실이다. */
-  async resolveLocation(code: string | null): Promise<Location | null> {
-    if (!code) return null;
+  /** 등록된 거점 코드여야 한다. */
+  async locationByCode(code: string): Promise<Location> {
     const location = await this.catalog.findLocationByCode(code);
     if (!location) throw scmError('UNKNOWN_LOCATION', `Unknown location ${code}`);
     return location;
+  }
+
+  /** `locationByCode` 에 거점 행 잠금을 더한다. 같은 거점을 바꾸는 트랜잭션의 첫 쿼리로 부른다. */
+  async lockLocationByCode(code: string): Promise<Location> {
+    const location = await this.catalog.findLocationByCodeForUpdate(code);
+    if (!location) throw scmError('UNKNOWN_LOCATION', `Unknown location ${code}`);
+    return location;
+  }
+
+  /** 거점 코드를 해석한다. 코드가 없으면(null) 거점 없는 사실이다. */
+  async resolveLocation(code: string | null): Promise<Location | null> {
+    if (!code) return null;
+    return this.locationByCode(code);
   }
 
   async locationCodeOf(locationId: string | null): Promise<string | null> {

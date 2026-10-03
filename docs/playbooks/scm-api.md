@@ -55,7 +55,13 @@ post $SCM/locations '{"code":"WH-ICN","name":"인천 창고","type":"WAREHOUSE",
 post $SCM/locations '{"code":"SVC-SEL","name":"서울 서비스센터","type":"SERVICE_CENTER","partner":"AS 업체 C"}'
 ```
 
-기대: 각각 보낸 본문 그대로 → 201
+기대: 각각 보낸 본문에 `policy` 가 붙은 모양 → 201. 새 거점은 능력 프로필 행이 없어도 기본값이 채워져 나온다 (34):
+
+```text
+{"code":"FAC-SZ","name":"선전 공장","type":"FACTORY","partner":"제조사 A","policy":{"reportsSerialsOnReceipt":true,"reportsSerialsOnShipment":true,"reportsSerialsOnOutbound":true,"reportsInspectionResult":false,"decidesDisposition":false,"requiresHubConfirmation":false,"unitReceiptTrigger":"PUTAWAY","autoRegisterOnPutaway":false}}
+```
+
+나머지 두 거점은 `code` `name` `type` `partner` 만 다르고 `policy` 는 같다.
 
 ### 7. 거점 목록 — code 순
 
@@ -63,20 +69,9 @@ post $SCM/locations '{"code":"SVC-SEL","name":"서울 서비스센터","type":"S
 get $SCM/locations
 ```
 
-기대 → 200:
-
-```json
-[
-  { "code": "FAC-SZ", "name": "선전 공장", "type": "FACTORY", "partner": "제조사 A" },
-  {
-    "code": "SVC-SEL",
-    "name": "서울 서비스센터",
-    "type": "SERVICE_CENTER",
-    "partner": "AS 업체 C"
-  },
-  { "code": "WH-ICN", "name": "인천 창고", "type": "WAREHOUSE", "partner": "3PL B" }
-]
-```
+기대 → 200: 배열의 `code` 가 `FAC-SZ`, `SVC-SEL`, `WH-ICN` 순이고, 각 항목은 6 의 본문(`name` `type` `partner`)과 같다.
+`policy` 는 셋 다 6 의 기본 프로필이다.
+(이전 실행이 남긴 거점이 더 있을 수 있다. 34 이후를 돌린 DB 라면 `WH-POL-*` 도 섞여 있고 그 `policy` 는 바뀌어 있다.)
 
 ### 8. 요청 검증 실패
 
@@ -391,3 +386,135 @@ post $AS/cases/<응답 id>/confirm-doa '{"disposition":"RETURN_TO_VENDOR"}'
 ```
 
 기대: scm-api 로그에 `ERROR [AsCaseEventsConsumer] as.doa.confirmed for unknown serial GHOST-<RUN> (case <id>)` 한 줄. `get $SCM/units/GHOST-$RUN` 은 404 `UNIT_NOT_FOUND`. 재시도하지 않는다 (같은 줄이 반복되지 않는다).
+
+## 거점 능력 프로필 (`WH-POL-$RUN`)
+
+거점마다 "무엇을 보고해 주고 무엇을 정하는가"를 값으로 둔 프로필이다 (`docs/06-inbound-design.md` "정책 변경 지점"). 이 단계들은 scm-api 만 있으면 된다.
+`DB` 를 직접 보는 단계는 서브에이전트라면 `lh_scm` 대신 자기 DB 를 쓴다.
+
+### 34. 새 거점은 기본 프로필이고, 프로필 행도 이력도 없다
+
+```sh
+post $SCM/locations "{\"code\":\"WH-POL-$RUN\",\"name\":\"정책 시험 창고\",\"type\":\"WAREHOUSE\",\"partner\":\"3PL B\"}"
+get $SCM/locations/WH-POL-$RUN/policy/changes
+docker-compose exec -T mysql mysql -uroot -proot lh_scm -e "SELECT COUNT(*) AS rows_for_location FROM location_policies p JOIN locations l ON l.id = p.location_id WHERE l.code = 'WH-POL-$RUN'"
+```
+
+기대: 201 —
+
+```text
+{"code":"WH-POL-<RUN>","name":"정책 시험 창고","type":"WAREHOUSE","partner":"3PL B","policy":{"reportsSerialsOnReceipt":true,"reportsSerialsOnShipment":true,"reportsSerialsOnOutbound":true,"reportsInspectionResult":false,"decidesDisposition":false,"requiresHubConfirmation":false,"unitReceiptTrigger":"PUTAWAY","autoRegisterOnPutaway":false}}
+```
+
+이력 `[]` → 200. DB 의 `rows_for_location` 은 `0` (행이 없어도 기본값으로 동작한다).
+
+### 35. 일부 항목만 바꾼다 — 나머지는 그대로, 행이 처음 생긴다
+
+```sh
+put $SCM/locations/WH-POL-$RUN/policy '{"actor":"ops-kim","reportsSerialsOnReceipt":false,"unitReceiptTrigger":"GOODS_RECEIPT"}'
+docker-compose exec -T mysql mysql -uroot -proot lh_scm -e "SELECT p.reports_serials_on_receipt, p.unit_receipt_trigger, p.decides_disposition, p.updated_by FROM location_policies p JOIN locations l ON l.id = p.location_id WHERE l.code = 'WH-POL-$RUN'"
+```
+
+기대: 해석된 프로필 전체 → 200 (`put` 은 `post` 와 같되 `-X PUT`).
+
+```text
+{"reportsSerialsOnReceipt":false,"reportsSerialsOnShipment":true,"reportsSerialsOnOutbound":true,"reportsInspectionResult":false,"decidesDisposition":false,"requiresHubConfirmation":false,"unitReceiptTrigger":"GOODS_RECEIPT","autoRegisterOnPutaway":false}
+```
+
+DB 는 한 행: `0  GOODS_RECEIPT  0  ops-kim`.
+
+### 36. 두 번째 변경은 앞의 값을 유지하고, 거점 목록에도 반영된다
+
+```sh
+put $SCM/locations/WH-POL-$RUN/policy '{"actor":"ops-lee","decidesDisposition":true,"reportsSerialsOnReceipt":true}'
+get $SCM/locations
+```
+
+기대: 첫 줄 → 200, `reportsSerialsOnReceipt` 가 다시 `true`, `decidesDisposition` 이 `true`, `unitReceiptTrigger` 는 35 에서 바꾼 `GOODS_RECEIPT` 그대로, 나머지는 기본값.
+목록 → 200: `WH-POL-<RUN>` 의 `policy` 가 같은 값이고, 다른 거점(`FAC-SZ` 등)의 `policy` 는 기본 프로필 그대로.
+
+### 37. 변경 이력 — 최신순, 기본값이 채워진 before·after
+
+```sh
+get $SCM/locations/WH-POL-$RUN/policy/changes
+```
+
+기대 → 200: 2건. 첫 건은 `actor` `ops-lee`, 둘째는 `ops-kim`. `changedAt` 은 ISO 시각.
+`ops-kim` 의 `before` 는 기본 프로필(`reportsSerialsOnReceipt` `true`, `unitReceiptTrigger` `PUTAWAY`)이고 `after` 는 35 의 응답과 같다.
+`ops-lee` 의 `before` 는 35 의 응답, `after` 는 36 의 응답과 같다. 키 순서는 프로필 응답과 같다 (`reportsSerialsOnReceipt` 부터 `autoRegisterOnPutaway` 까지).
+
+### 38. 바뀌는 것이 없는 요청은 이력을 남기지 않고, 거점 재등록은 프로필을 건드리지 않는다
+
+```sh
+put $SCM/locations/WH-POL-$RUN/policy '{"actor":"ops-lee","decidesDisposition":true}'
+post $SCM/locations "{\"code\":\"WH-POL-$RUN\",\"name\":\"정책 시험 창고\",\"type\":\"WAREHOUSE\",\"partner\":\"3PL B\"}"
+curl -s $SCM/locations/WH-POL-$RUN/policy/changes | jq -c 'map(.actor)'
+```
+
+기대: 첫 줄 → 200 (36 의 응답 그대로), 둘째 → 201 (`policy` 는 36 의 값 그대로), 이력의 `actor` 는 `["ops-lee","ops-kim"]` — 여전히 2건.
+
+### 39. 모르는 거점은 UNKNOWN_LOCATION
+
+```sh
+put $SCM/locations/NOWHERE/policy '{"actor":"ops-kim","decidesDisposition":true}'
+get $SCM/locations/NOWHERE/policy/changes
+```
+
+기대: 둘 다 `{"code":"UNKNOWN_LOCATION","message":"Unknown location NOWHERE"}` → 422.
+
+### 40. 잘못된 변경 요청은 거절되고 아무것도 바뀌지 않는다
+
+```sh
+put $SCM/locations/WH-POL-$RUN/policy '{"actor":"ops-kim"}'
+put $SCM/locations/WH-POL-$RUN/policy '{"decidesDisposition":false}'
+put $SCM/locations/WH-POL-$RUN/policy '{"actor":"ops-kim","unitReceiptTrigger":"NEVER"}'
+put $SCM/locations/WH-POL-$RUN/policy '{"actor":"ops-kim","decidesDisposition":"no"}'
+put $SCM/locations/WH-POL-$RUN/policy '{"actor":"ops-kim","decideDisposition":false}'
+curl -s $SCM/locations/WH-POL-$RUN/policy/changes | jq -c 'map(.actor)'
+```
+
+기대: 모두 400 `VALIDATION_FAILED`, `details` 는 차례로
+
+```text
+[{"path":"","message":"At least one policy field is required"}]
+[{"path":"actor","message":"Invalid input: expected string, received undefined"}]
+[{"path":"unitReceiptTrigger","message":"Invalid option: expected one of \"GOODS_RECEIPT\"|\"PUTAWAY\""}]
+[{"path":"decidesDisposition","message":"Invalid input: expected boolean, received string"}]
+[{"path":"","message":"Unrecognized key: \"decideDisposition\""},{"path":"","message":"At least one policy field is required"}]
+```
+
+(모르는 항목은 오타일 수 있어 거절한다.) 이력은 여전히 `["ops-lee","ops-kim"]`.
+
+### 41. 같은 거점의 동시 변경은 서로 덮어쓰지 않는다
+
+```sh
+CODE=WH-CONC-$RUN
+post $SCM/locations "{\"code\":\"$CODE\",\"name\":\"동시성 시험 창고\",\"type\":\"WAREHOUSE\",\"partner\":\"3PL B\"}"
+for f in reportsSerialsOnReceipt reportsSerialsOnShipment reportsSerialsOnOutbound reportsInspectionResult decidesDisposition requiresHubConfirmation autoRegisterOnPutaway; do
+  v=true; case $f in reportsSerialsOn*) v=false;; esac
+  curl -s -o /dev/null -w "$f %{http_code}\n" -X PUT $SCM/locations/$CODE/policy -H 'content-type: application/json' -d "{\"actor\":\"$f\",\"$f\":$v}" &
+done
+wait
+curl -s $SCM/locations/$CODE/policy/changes | jq 'length'
+curl -s $SCM/locations/$CODE/policy/changes | jq 'reverse as $c | [range(1; $c|length)] | map($c[.].before == $c[.-1].after) | all'
+curl -s $SCM/locations | jq -c ".[] | select(.code==\"$CODE\") | .policy"
+```
+
+기대: 일곱 요청 모두 200. 이력은 `7`건이고, 오래된 순으로 놓았을 때 각 건의 `before` 가 앞 건의 `after` 와 같다 (`true`).
+최종 프로필에는 일곱 변경이 모두 들어 있다: 앞 세 항목(`reportsSerialsOn*`)은 `false`, `reportsInspectionResult` `decidesDisposition` `requiresHubConfirmation` `autoRegisterOnPutaway` 는 `true`, `unitReceiptTrigger` 는 `PUTAWAY`.
+(잠금보다 먼저 일반 읽기를 하면 스냅샷이 잠금 전에 잡혀 먼저 커밋된 변경을 못 보고 덮어쓴다. 이력은 7건이어도 연결 검사가 `false` 이고 최종 프로필에서 변경이 빠진다.)
+
+### 42. 서로 다른 새 거점의 첫 변경이 동시에 와도 교착하지 않는다
+
+```sh
+for n in 1 2 3 4 5 6; do
+  post $SCM/locations "{\"code\":\"WH-DL-$RUN-$n\",\"name\":\"교착 시험 창고\",\"type\":\"WAREHOUSE\",\"partner\":\"3PL B\"}" > /dev/null
+done
+for n in 1 2 3 4 5 6; do
+  curl -s -o /dev/null -w "%{http_code} " -X PUT $SCM/locations/WH-DL-$RUN-$n/policy -H 'content-type: application/json' -d '{"actor":"ops-kim","decidesDisposition":true}' &
+done
+wait; echo
+```
+
+기대: `200 200 200 200 200 200` (순서는 다를 수 있다). 프로필 행이 아직 없는 거점의 행을 `FOR UPDATE` 로 읽으면 같은 인덱스 갭에 락이 겹쳐 일부가 교착으로 `500` 이 된다.
+이를 피하려고 변경 트랜잭션은 첫 쿼리로 거점 행만 잠그고, 프로필은 일반 읽기로 읽는다.
