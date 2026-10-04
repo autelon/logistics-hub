@@ -1,19 +1,21 @@
 # transport 플레이북
 
-준비와 변수(`SCM`, `post`, `get`)는 [README.md](README.md). scm-api 와 MySQL 만 있으면 된다 (Redis 불필요: `REDIS_URL=` 을 비워 띄워도 된다). `jq` 를 쓴다.
+준비와 변수(`SCM`, `post`, `get`)는 [README.md](README.md). scm-api 와 MySQL 이 있으면 된다. `jq` 를 쓴다. Redis 는 단계 26(아웃박스가 비는 시간)에만 필요하고, 나머지는 `REDIS_URL=` 을 비워 띄워도 된다.
 규격: `packages/contracts/src/transport.ts`. 에러 코드와 상태: `apps/scm-api/src/errors.ts`. 규칙: [../02-domain-model.md](../02-domain-model.md) "선적".
 화면은 [web-console.md](web-console.md) 의 선적 단계.
 
-이 플레이북은 **빈 DB** 에서 처음부터 돌린 값이다 (서브에이전트 구성: 포트 3901, DB `lh_scm_tr`, `REDIS_URL=`). 발주 번호는 허브가 채번하므로 다른 데이터가 있으면 번호가 다르다.
-아래 "관찰" 블록은 실제 응답이고, 매번 달라지는 값만 바꿨다: `UNLINKED-<id>`(연결되지 않은 선적의 번호), `<uuid>`, `<시각>`. 단계 2·5·7·8 에서 받은 번호를 변수(`PO1`…`PO4`, `UNL`, `UNL2`)에 담아 뒤 단계에서 쓴다.
+이 플레이북은 **빈 DB** 에서 처음부터 돌린 값이다 (서브에이전트 구성: 포트 3951, DB `lh_scm_void`, `REDIS_URL=redis://localhost:6379/13`, `DEVICE_API_URL=http://localhost:3999`). 발주 번호는 허브가 채번하므로 다른 데이터가 있으면 번호가 다르다.
+`DEVICE_API_URL` 은 아무것도 떠 있지 않은 주소로 둔다: 단계 24 가 만드는 기기 요청의 알림이 다른 사람의 모의 기기 서버로 가지 않게 하기 위해서다(알림은 실패하고 요청은 `NOT_NOTIFIED` 로 남는다).
+아래 "관찰" 블록은 실제 응답이고, 매번 달라지는 값만 바꿨다: `UNLINKED-<id>`(연결되지 않은 선적의 번호), `<uuid>`, `<시각>`. 단계 2·5·7·8·22 에서 받은 번호를 변수(`PO1`…`PO6`, `UNL`, `UNL2`)에 담아 뒤 단계에서 쓴다.
 DB 를 보는 단계는 다음 함수를 쓴다 (컨테이너 이름은 환경에 맞춘다):
 
 ```sh
-sql() { docker exec logistics-hub-mysql-1 mysql --default-character-set=utf8mb4 -uroot -proot lh_scm_tr -e "$1" 2>&1 | grep -v 'Using a password'; }
+sql() { docker exec logistics-hub-mysql-1 mysql --default-character-set=utf8mb4 -uroot -proot lh_scm_void -e "$1" 2>&1 | grep -v 'Using a password'; }
 ```
 
 선적은 업체가 보고한 사실이라 **거부하지 않고 기록한다.** 거절은 마스터 데이터에 없는 SKU 뿐이다. 이상은 응답과 조회에 `anomalies` 로 실린다 (코드: `ShipmentAnomalyCode`).
 단계 4–8 은 제출, 9–11 은 조회, 12–14 는 운영자의 연결 명령, 15 는 선적 단위 제품 등록, 16–17 은 동시성과 대량이다.
+단계 18–26 은 선적의 정정(무효화)이다: 18 거절, 19–20 무효화(연결 전 번호의 사실 포함), 21 무효화 뒤의 거절, 22 재제출, 23 이미 정정된 사실, 24 기기 요청, 25 동시 요청, 26 대량 5,000개.
 
 ### 1. 제품과 거점
 
@@ -288,7 +290,7 @@ PO4=PO-2026-000004
 최근 50건(도착 순서의 역순).
 
 ```sh
-get $SCM/shipments | head -1 | jq -c '.[] | {shipmentNo, poNumber, reportedPoNumber, lineCount, totalQty, serialCount, anomalyCount}'
+get $SCM/shipments | head -1 | jq -c '.[] | {shipmentNo, poNumber, reportedPoNumber, lineCount, totalQty, serialCount, anomalyCount, voided}'
 curl -s "$SCM/shipments?poNumber=PO-2026-000001" | jq -c '.[] | {shipmentNo, poNumber, anomalyCount}'
 curl -s "$SCM/shipments?unlinked=true" | jq -c '.[] | {shipmentNo, reportedPoNumber, anomalyCount}'
 get "$SCM/shipments?poNumber=PO-NOPE"
@@ -298,18 +300,18 @@ get $SCM/shipments/PO-2026-000001-R2
 관찰:
 
 ```
-{"shipmentNo":"PO-2026-000004-R1","poNumber":"PO-2026-000004","reportedPoNumber":"PO-2026-000004","lineCount":2,"totalQty":2,"serialCount":1,"anomalyCount":2}
-{"shipmentNo":"UNLINKED-<id>","poNumber":null,"reportedPoNumber":"PO-2026-000002","lineCount":2,"totalQty":3,"serialCount":3,"anomalyCount":4}
-{"shipmentNo":"UNLINKED-<id>","poNumber":null,"reportedPoNumber":"PO-2026-999999","lineCount":1,"totalQty":1,"serialCount":1,"anomalyCount":1}
-{"shipmentNo":"PO-2026-000001-R2","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-000001","lineCount":1,"totalQty":3,"serialCount":2,"anomalyCount":2}
-{"shipmentNo":"PO-2026-000001-R1","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-000001","lineCount":2,"totalQty":22,"serialCount":2,"anomalyCount":0}
+{"shipmentNo":"PO-2026-000004-R1","poNumber":"PO-2026-000004","reportedPoNumber":"PO-2026-000004","lineCount":2,"totalQty":2,"serialCount":1,"anomalyCount":2,"voided":false}
+{"shipmentNo":"UNLINKED-<id>","poNumber":null,"reportedPoNumber":"PO-2026-000002","lineCount":2,"totalQty":3,"serialCount":3,"anomalyCount":4,"voided":false}
+{"shipmentNo":"UNLINKED-<id>","poNumber":null,"reportedPoNumber":"PO-2026-999999","lineCount":1,"totalQty":1,"serialCount":1,"anomalyCount":1,"voided":false}
+{"shipmentNo":"PO-2026-000001-R2","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-000001","lineCount":1,"totalQty":3,"serialCount":2,"anomalyCount":2,"voided":false}
+{"shipmentNo":"PO-2026-000001-R1","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-000001","lineCount":2,"totalQty":22,"serialCount":2,"anomalyCount":0,"voided":false}
 {"shipmentNo":"PO-2026-000001-R2","poNumber":"PO-2026-000001","anomalyCount":2}
 {"shipmentNo":"PO-2026-000001-R1","poNumber":"PO-2026-000001","anomalyCount":0}
 {"shipmentNo":"UNLINKED-<id>","reportedPoNumber":"PO-2026-000002","anomalyCount":4}
 {"shipmentNo":"UNLINKED-<id>","reportedPoNumber":"PO-2026-999999","anomalyCount":1}
 []
 → 200
-{"shipmentNo":"PO-2026-000001-R2","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-000001","blNumber":"BL-A2","invoiceNumber":null,"shipper":"ACME Shenzhen","mode":"AIR","shipDate":"2026-10-03","eta":null,"source":{"system":"acme-portal","ref":"sub-2"},"reportedAt":"<시각>","recordedAt":"<시각>","lineCount":1,"totalQty":3,"serialCount":2,"anomalyCount":2,"note":null,"lines":[{"lineNo":1,"sku":"CAM-01","quantity":3,"lotNo":null,"poLineNo":1,"serialCount":2}],"anomalies":[{"code":"OVER_SHIPPED","lineNo":1,"message":"발주 줄 1 (CAM-01) 선적 누계 5 이(가) 주문 4 + 과납 허용을 넘음"},{"code":"SERIAL_COUNT_MISMATCH","lineNo":1,"message":"CAM-01 시리얼 2개, 수량 3"}],"link":null}
+{"shipmentNo":"PO-2026-000001-R2","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-000001","blNumber":"BL-A2","invoiceNumber":null,"shipper":"ACME Shenzhen","mode":"AIR","shipDate":"2026-10-03","eta":null,"source":{"system":"acme-portal","ref":"sub-2"},"reportedAt":"<시각>","recordedAt":"<시각>","lineCount":1,"totalQty":3,"serialCount":2,"anomalyCount":2,"voided":false,"note":null,"lines":[{"lineNo":1,"sku":"CAM-01","quantity":3,"lotNo":null,"poLineNo":1,"serialCount":2}],"anomalies":[{"code":"OVER_SHIPPED","lineNo":1,"message":"발주 줄 1 (CAM-01) 선적 누계 5 이(가) 주문 4 + 과납 허용을 넘음"},{"code":"SERIAL_COUNT_MISMATCH","lineNo":1,"message":"CAM-01 시리얼 2개, 수량 3"}],"link":null,"voidRecord":null}
 → 200
 ```
 
@@ -395,7 +397,7 @@ post $SCM/shipments/$UNL/link '{"poNumber":"PO-2026-000001","actor":"op-1","reas
 관찰:
 
 ```
-{"shipmentNo":"PO-2026-000001-R3","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-999999","blNumber":"BL-X1","invoiceNumber":null,"shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-02","eta":null,"source":{"system":"acme-portal","ref":"sub-3"},"reportedAt":"<시각>","recordedAt":"<시각>","lineCount":1,"totalQty":1,"serialCount":1,"anomalyCount":1,"note":null,"lines":[{"lineNo":1,"sku":"CAM-01","quantity":1,"lotNo":null,"poLineNo":1,"serialCount":1}],"anomalies":[{"code":"OVER_SHIPPED","lineNo":1,"message":"발주 줄 1 (CAM-01) 선적 누계 6 이(가) 주문 4 + 과납 허용을 넘음"}],"link":{"previousShipmentNo":"UNLINKED-<id>","poNumber":"PO-2026-000001","actor":"op-1","reason":"제조사가 발주 번호를 잘못 적음","linkedAt":"<시각>","anomalies":[{"code":"OVER_SHIPPED","lineNo":1,"message":"발주 줄 1 (CAM-01) 선적 누계 6 이(가) 주문 4 + 과납 허용을 넘음"}]}}
+{"shipmentNo":"PO-2026-000001-R3","poNumber":"PO-2026-000001","reportedPoNumber":"PO-2026-999999","blNumber":"BL-X1","invoiceNumber":null,"shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-02","eta":null,"source":{"system":"acme-portal","ref":"sub-3"},"reportedAt":"<시각>","recordedAt":"<시각>","lineCount":1,"totalQty":1,"serialCount":1,"anomalyCount":1,"voided":false,"note":null,"lines":[{"lineNo":1,"sku":"CAM-01","quantity":1,"lotNo":null,"poLineNo":1,"serialCount":1}],"anomalies":[{"code":"OVER_SHIPPED","lineNo":1,"message":"발주 줄 1 (CAM-01) 선적 누계 6 이(가) 주문 4 + 과납 허용을 넘음"}],"link":{"previousShipmentNo":"UNLINKED-<id>","poNumber":"PO-2026-000001","actor":"op-1","reason":"제조사가 발주 번호를 잘못 적음","linkedAt":"<시각>","anomalies":[{"code":"OVER_SHIPPED","lineNo":1,"message":"발주 줄 1 (CAM-01) 선적 누계 6 이(가) 주문 4 + 과납 허용을 넘음"}]},"voidRecord":null}
 → 201
 ```
 
@@ -518,7 +520,7 @@ dispatched
 
 ```sh
 seq 1 5000 | jq -R -s -c '{shipments:[{poNumber:"PO-2026-000001",blNumber:"BL-BULK",shipper:"ACME",mode:"SEA",lines:[{sku:"CAM-01",quantity:5000,serialNumbers:(split("\n")|map(select(.!=""))|map("BULK-"+.))}],source:{system:"acme-portal"}}]}' > /tmp/bulk-$$.json
-curl -s -o /tmp/bulk-out-$$.json -w 'http %{http_code}\n' -X POST $SCM/shipments/intake -H 'content-type: application/json' --data-binary @/tmp/bulk-$$.json
+curl -s -o /tmp/bulk-out-$$.json -w 'http %{http_code} 응답 %{time_total}s\n' -X POST $SCM/shipments/intake -H 'content-type: application/json' --data-binary @/tmp/bulk-$$.json
 jq -c '.shipments[0] | {shipmentNo, duplicate}' /tmp/bulk-out-$$.json; rm /tmp/bulk-$$.json /tmp/bulk-out-$$.json
 sql "select count(*) as units from units where serial_number like 'BULK-%'; select count(*) as dispatched from unit_events e join units u on u.id=e.unit_id where u.serial_number like 'BULK-%';"
 ```
@@ -526,7 +528,7 @@ sql "select count(*) as units from units where serial_number like 'BULK-%'; sele
 관찰:
 
 ```
-http 201
+http 201 응답 2.433903s
 {"shipmentNo":"PO-2026-000001-R4","duplicate":false}
 units
 5000
@@ -534,7 +536,354 @@ dispatched
 5000
 ```
 
+### 18. 무효화 명령의 거절
+
+선적의 정정은 줄 단위가 아니라 **선적 전체를 무효화**하고 다시 제출하는 것이다. 우리가 내리는 명령이라 전제가 맞지 않으면 거절한다. 거절은 아무것도 바꾸지 않는다.
+
+```sh
+post $SCM/shipments/NOPE/void '{"actor":"op-1","reason":"x"}'
+post $SCM/shipments/$UNL2/void '{"actor":"op-1"}'
+post $SCM/shipments/$UNL2/void "{\"actor\":\"op-1\",\"reason\":\"$(printf 'x%.0s' $(seq 1 401))\"}" | cut -c1-200
+sql "select count(*) as shipment_corrections from shipment_corrections; select count(*) as unit_event_corrections from unit_event_corrections;"
+```
+
+관찰:
+
+```
+{"code":"SHIPMENT_NOT_FOUND","message":"Unknown shipment NOPE"}
+→ 404
+{"code":"VALIDATION_FAILED","details":[{"path":"reason","message":"Invalid input: expected string, received undefined"}]}
+→ 400
+{"code":"VALIDATION_FAILED","details":[{"path":"reason","message":"Too big: expected string to have <=400 characters"}]}
+→ 400
+shipment_corrections
+0
+unit_event_corrections
+0
+```
+
+### 19. 연결 전 번호의 선적(`$UNL2`) 무효화: 다른 선적에도 있는 시리얼
+
+`$UNL2`(단계 7)는 `CAM-0001` 을 `PO-2026-000001-R1` 과 겹쳐 싣고 있다. 무효화하면 `$UNL2` 가 만든 `DISPATCHED`(출처 참조 `UNLINKED-…`)만 정정되고 `R1` 의 것은 남는다. 사실은 지워지지 않고 정정 기록이 붙으며, 개체를 다시 접어 상태가 맞춰진다(두 번째 출발 때문에 붙었던 이상이 사라진다). `MIX-1`(다른 SKU 라 이력을 남기지 않았다)은 그대로다. 시리얼마다 `scm.unit.event-voided` 가 아웃박스에 하나씩 적힌다.
+
+```sh
+get $SCM/units/CAM-0001 | head -1 | jq -c '{status, anomalies, events: [.events[] | {type, ref: .source.ref, corrected: (.correction != null)}]}'
+sql "select count(*) as event_voided_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-voided';"
+post $SCM/shipments/$UNL2/void '{"actor":"op-1","reason":"제조사가 시리얼 목록을 잘못 보냄"}'
+get $SCM/units/CAM-0001 | head -1 | jq -c '{status, anomalies, events: [.events[] | {type, ref: .source.ref, corrected: (.correction != null)}]}'
+get $SCM/units/CAM-0001 | head -1 | jq -c '.events[] | select(.correction != null) | .correction'
+get $SCM/units/MIX-1 | head -1 | jq -c '{status, events: [.events[].type]}'
+curl -s "$SCM/shipments?unlinked=true" | jq -c --arg n "$UNL2" '.[] | select(.shipmentNo == $n) | {shipmentNo, reportedPoNumber, voided}'
+sql "select count(*) as event_voided_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-voided'; select o.\`key\`, o.payload->>'\$.payload.eventType' as event_type, o.payload->>'\$.payload.reason' as reason, o.payload->>'\$.payload.replacementEventId' as replacement from outbox_events o where o.payload->>'\$.type' = 'scm.unit.event-voided';"
+sql "select s.shipment_no, c.actor, c.reason from shipment_corrections c join shipments s on s.id = c.shipment_id; select count(*) as unit_event_corrections from unit_event_corrections;"
+```
+
+관찰:
+
+```
+{"status":"IN_STOCK","anomalies":["<시각> DISPATCHED: IN_TRANSIT 상태에서 올 수 없는 사실"],"events":[{"type":"DISPATCHED","ref":"PO-2026-000001-R1","corrected":false},{"type":"DISPATCHED","ref":"UNLINKED-<id>","corrected":false},{"type":"REGISTERED","ref":"op-1","corrected":false},{"type":"RECEIVED","ref":null,"corrected":false}]}
+event_voided_rows
+0
+{"shipment":{"shipmentNo":"UNLINKED-<id>","poNumber":null,"reportedPoNumber":"PO-2026-000002","blNumber":"BL-M1","invoiceNumber":null,"shipper":"ACME Shenzhen","mode":"ROAD","shipDate":null,"eta":null,"source":{"system":"acme-portal","ref":null},"reportedAt":"<시각>","recordedAt":"<시각>","lineCount":2,"totalQty":3,"serialCount":3,"anomalyCount":4,"voided":true,"note":null,"lines":[{"lineNo":1,"sku":"CAM-01","quantity":2,"lotNo":null,"poLineNo":null,"serialCount":2},{"lineNo":2,"sku":"LENS-01","quantity":1,"lotNo":null,"poLineNo":null,"serialCount":1}],"anomalies":[{"code":"PO_UNLINKED","lineNo":null,"message":"발주 PO-2026-000002 가 DRAFT 상태라 연결하지 못함 (ISSUED 아님)"},{"code":"DUPLICATE_SERIAL","lineNo":1,"message":"다른 선적에 이미 있는 시리얼: CAM-0001"},{"code":"SERIAL_SKU_CONFLICT","lineNo":1,"message":"이미 다른 SKU 로 등록된 시리얼 (CAM-01 가 아님): MIX-1. 이력을 남기지 않음"},{"code":"SERIALS_ON_UNTRACKED_PRODUCT","lineNo":2,"message":"LENS-01 은(는) 시리얼 추적 제품이 아닌데 시리얼 1개가 옴 (개체는 만들지 않음)"}],"link":null,"voidRecord":{"actor":"op-1","reason":"제조사가 시리얼 목록을 잘못 보냄","voidedAt":"<시각>"}},"voidedEvents":1,"skippedEvents":0,"deviceRequestIds":[]}
+→ 201
+{"status":"IN_STOCK","anomalies":[],"events":[{"type":"DISPATCHED","ref":"PO-2026-000001-R1","corrected":false},{"type":"DISPATCHED","ref":"UNLINKED-<id>","corrected":true},{"type":"REGISTERED","ref":"op-1","corrected":false},{"type":"RECEIVED","ref":null,"corrected":false}]}
+{"id":"<uuid>","reason":"선적 UNLINKED-<id> 무효화: 제조사가 시리얼 목록을 잘못 보냄","actor":"op-1","recordedAt":"<시각>","replacementEventId":null}
+{"status":"PRODUCED","events":["MANUFACTURED"]}
+{"shipmentNo":"UNLINKED-<id>","reportedPoNumber":"PO-2026-000002","voided":true}
+event_voided_rows
+1
+key	event_type	reason	replacement
+CAM-0001	DISPATCHED	선적 UNLINKED-<id> 무효화: 제조사가 시리얼 목록을 잘못 보냄	null
+shipment_no	actor	reason
+UNLINKED-<id>	op-1	제조사가 시리얼 목록을 잘못 보냄
+unit_event_corrections
+1
+```
+
+응답 `voidedEvents` 1(`CAM-0001`), `skippedEvents` 0, `deviceRequestIds` 빈 목록. 정정 사유에는 선적 번호가 붙는다(`선적 <번호> 무효화: <사유>`).
+
+### 20. 연결된 선적(`PO-2026-000001-R3`) 무효화: 연결 전 번호로 남은 사실
+
+`R3` 는 단계 13 에서 `$UNL` 을 연결한 선적이다. 그 선적이 만든 `CAM-0005` 의 `DISPATCHED` 는 출처 참조가 **연결 전 번호**(`UNLINKED-…`)로 남아 있다. 지금 번호(`R3`)로 무효화해도 연결 기록(`shipment_links.previous_shipment_no`)으로 그 사실을 찾아 정정한다. 발주 줄의 선적 수량 누계에서 `R3` 의 1이 빠진다.
+
+```sh
+get $SCM/purchase-orders/$PO1 | head -1 | jq -c '.lines[0] | {lineNo, sku, orderedQty, shippedQty}'
+get $SCM/units/CAM-0005 | head -1 | jq -c '{status, events: [.events[] | {type, ref: .source.ref, corrected: (.correction != null)}]}'
+sql "select previous_shipment_no, shipment_no from shipment_links;"
+curl -s -X POST $SCM/shipments/PO-2026-000001-R3/void -H 'content-type: application/json' -d '{"actor":"op-1","reason":"BL-X1 은 다른 거래처 선적임"}' | jq -c '{voidedEvents, skippedEvents, deviceRequestIds, shipmentNo: .shipment.shipmentNo, voided: .shipment.voided, voidRecord: .shipment.voidRecord}'
+get $SCM/purchase-orders/$PO1 | head -1 | jq -c '.lines[0] | {lineNo, sku, orderedQty, shippedQty}'
+get $SCM/units/CAM-0005 | head -1 | jq -c '{status, events: [.events[] | {type, ref: .source.ref, corrected: (.correction != null)}]}'
+sql "select count(*) as event_voided_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-voided';"
+```
+
+관찰:
+
+```
+{"lineNo":1,"sku":"CAM-01","orderedQty":4,"shippedQty":5006}
+{"status":"IN_TRANSIT","events":[{"type":"DISPATCHED","ref":"UNLINKED-<id>","corrected":false}]}
+previous_shipment_no	shipment_no
+UNLINKED-<id>	PO-2026-000001-R3
+{"voidedEvents":1,"skippedEvents":0,"deviceRequestIds":[],"shipmentNo":"PO-2026-000001-R3","voided":true,"voidRecord":{"actor":"op-1","reason":"BL-X1 은 다른 거래처 선적임","voidedAt":"<시각>"}}
+{"lineNo":1,"sku":"CAM-01","orderedQty":4,"shippedQty":5005}
+{"status":"UNKNOWN","events":[{"type":"DISPATCHED","ref":"UNLINKED-<id>","corrected":true}]}
+event_voided_rows
+2
+```
+
+`shippedQty` 에는 단계 17 의 5,000개도 들어 있다.
+
+### 21. 무효화 뒤의 거절: 다시 무효화, 연결, 제품 등록
+
+무효화는 한 번뿐이고, 무효 선적은 연결 명령과 선적 단위 제품 등록을 받지 않는다. 이미 연결된 `R3` 를 연결하려는 경우도 `SHIPMENT_ALREADY_LINKED` 가 아니라 무효 선적으로 거절한다. 조회는 그대로 된다.
+
+```sh
+post $SCM/shipments/PO-2026-000001-R3/void '{"actor":"op-1","reason":"한 번 더"}'
+post $SCM/shipments/$UNL2/link "{\"poNumber\":\"$PO1\",\"actor\":\"op-1\",\"reason\":\"x\"}"
+post $SCM/shipments/PO-2026-000001-R3/link "{\"poNumber\":\"$PO1\",\"actor\":\"op-1\",\"reason\":\"x\"}"
+post $SCM/unit-registrations "{\"shipmentNo\":\"$UNL2\",\"actor\":\"op-1\"}"
+post $SCM/unit-registrations '{"shipmentNo":"PO-2026-000001-R3","actor":"op-1"}'
+get $SCM/shipments/$UNL | head -1 | jq -c '{shipmentNo, voided}'
+sql "select count(*) as shipment_corrections from shipment_corrections; select count(*) as unit_event_corrections from unit_event_corrections; select count(*) as event_voided_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-voided';"
+```
+
+관찰:
+
+```
+{"code":"SHIPMENT_ALREADY_VOIDED","message":"Shipment PO-2026-000001-R3 is already voided"}
+→ 409
+{"code":"SHIPMENT_ALREADY_VOIDED","message":"Shipment UNLINKED-<id> is voided and cannot be linked"}
+→ 409
+{"code":"SHIPMENT_ALREADY_VOIDED","message":"Shipment PO-2026-000001-R3 is voided and cannot be linked"}
+→ 409
+{"code":"SHIPMENT_ALREADY_VOIDED","message":"Shipment UNLINKED-<id> is voided"}
+→ 409
+{"code":"SHIPMENT_ALREADY_VOIDED","message":"Shipment PO-2026-000001-R3 is voided"}
+→ 409
+{"shipmentNo":"PO-2026-000001-R3","voided":true}
+shipment_corrections
+2
+unit_event_corrections
+2
+event_voided_rows
+2
+```
+
+거절은 아무것도 바꾸지 않는다(무효화 기록 2, 정정 기록 2, `event-voided` 2 그대로). 연결 전 번호(`$UNL`)로도 무효 선적이 조회된다.
+
+### 22. 재제출: 무효 선적은 누계와 알려진 시리얼에서 빠지고 새 차수를 받는다
+
+주문 2개짜리 발주 `PO5` 에 시리얼 `RS-1`, `RS-2` 를 제출하고 무효화한 뒤 같은 시리얼로 다시 제출한다. 무효 선적이 누계(2)와 시리얼을 잡고 있으면 `OVER_SHIPPED`·`DUPLICATE_SERIAL` 이 붙는다. 번호는 `R1` 을 다시 쓰지 않고 `R2` 다. 대조로 한 번 더 제출하면(`R3`) 무효화하지 않은 `R2` 와는 겹쳐서 두 이상이 붙는다.
+
+```sh
+mk() { curl -s -X POST $SCM/purchase-orders -H 'content-type: application/json' -d "$1" | jq -r .poNumber; }
+PO5=$(mk '{"supplier":"ACME Shenzhen","orderDate":"2026-10-04","currency":"USD","destinationLocationCode":"WH-ICN","actor":"buyer-1","lines":[{"sku":"CAM-01","orderedQty":2,"requestedDeliveryDate":"2026-11-15"}]}')
+echo "PO5=$PO5"
+post $SCM/purchase-orders/$PO5/issue '{"actor":"buyer-1"}' | tail -1
+RS='{"shipments":[{"poNumber":"'$PO5'","blNumber":"BL-RS","shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-06","lines":[{"sku":"CAM-01","quantity":2,"serialNumbers":["RS-1","RS-2"]}],"source":{"system":"acme-portal"}}]}'
+post $SCM/shipments/intake "$RS"
+get $SCM/purchase-orders/$PO5 | head -1 | jq -c '.lines[0] | {orderedQty, shippedQty}'
+curl -s -X POST $SCM/shipments/$PO5-R1/void -H 'content-type: application/json' -d '{"actor":"op-1","reason":"시리얼 목록을 다시 받기로 함"}' | jq -c '{voidedEvents, skippedEvents, shipmentNo: .shipment.shipmentNo, voided: .shipment.voided}'
+get $SCM/purchase-orders/$PO5 | head -1 | jq -c '.lines[0] | {orderedQty, shippedQty}'
+get $SCM/units/RS-2 | head -1 | jq -c '{status, events: [.events[] | {type, ref: .source.ref, corrected: (.correction != null)}]}'
+post $SCM/shipments/intake "$RS"
+get $SCM/units/RS-2 | head -1 | jq -c '{status, anomalies, events: [.events[] | {type, ref: .source.ref, corrected: (.correction != null)}]}'
+get $SCM/purchase-orders/$PO5 | head -1 | jq -c '.lines[0] | {orderedQty, shippedQty}'
+curl -s -X POST $SCM/shipments/intake -H 'content-type: application/json' -d "$RS" | jq -c '.shipments[0] | {shipmentNo, anomalies: [.anomalies[].code]}'
+sql "select shipment_no, (select count(*) from shipment_corrections c where c.shipment_id = s.id) as voided from shipments s where purchase_order_id = (select id from purchase_orders where po_number='$PO5') order by id;"
+```
+
+관찰:
+
+```
+PO5=PO-2026-000005
+→ 201
+{"shipments":[{"shipmentNo":"PO-2026-000005-R1","duplicate":false,"poNumber":"PO-2026-000005","anomalies":[]}]}
+→ 201
+{"orderedQty":2,"shippedQty":2}
+{"voidedEvents":2,"skippedEvents":0,"shipmentNo":"PO-2026-000005-R1","voided":true}
+{"orderedQty":2,"shippedQty":0}
+{"status":"UNKNOWN","events":[{"type":"DISPATCHED","ref":"PO-2026-000005-R1","corrected":true}]}
+{"shipments":[{"shipmentNo":"PO-2026-000005-R2","duplicate":false,"poNumber":"PO-2026-000005","anomalies":[]}]}
+→ 201
+{"status":"IN_TRANSIT","anomalies":[],"events":[{"type":"DISPATCHED","ref":"PO-2026-000005-R1","corrected":true},{"type":"DISPATCHED","ref":"PO-2026-000005-R2","corrected":false}]}
+{"orderedQty":2,"shippedQty":2}
+{"shipmentNo":"PO-2026-000005-R3","anomalies":["OVER_SHIPPED","DUPLICATE_SERIAL"]}
+shipment_no	voided
+PO-2026-000005-R1	1
+PO-2026-000005-R2	0
+PO-2026-000005-R3	0
+```
+
+### 23. 이미 정정된 사실은 건너뛴다
+
+운영자가 `SK-1` 의 출발 사실을 먼저 따로 정정해 두었다(`POST /unit-events/:id/corrections`). 그 선적을 무효화하면 이미 정정된 사실은 건너뛰고(`skippedEvents` 1) 나머지만 정정한다. 건너뛴 사실은 `event-voided` 를 다시 내지 않는다: `SK-1`·`SK-2` 합쳐 2건이다(`SK-1` 은 먼저 한 정정이, `SK-2` 는 이 무효화가 낸 것).
+
+```sh
+OUT=$(curl -s -X POST $SCM/shipments/intake -H 'content-type: application/json' -d '{"shipments":[{"poNumber":"PO-NONE","blNumber":"BL-SK","shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-06","lines":[{"sku":"CAM-01","quantity":2,"serialNumbers":["SK-1","SK-2"]}],"source":{"system":"acme-portal"}}]}')
+SK=$(echo "$OUT" | jq -r '.shipments[0].shipmentNo'); echo "SK=$SK"
+EV=$(curl -s $SCM/units/SK-1 | jq -r '.events[0].id')
+post $SCM/unit-events/$EV/corrections '{"actor":"op-2","reason":"SK-1 은 아직 출발 전이었음"}'
+curl -s -X POST $SCM/shipments/$SK/void -H 'content-type: application/json' -d '{"actor":"op-1","reason":"선적 전체가 잘못 보고됨"}' | jq -c '{voidedEvents, skippedEvents, deviceRequestIds, shipmentNo: .shipment.shipmentNo, voided: .shipment.voided}'
+get $SCM/units/SK-1 | head -1 | jq -c '{status, events: [.events[] | {type, corrected: (.correction != null), reason: .correction.reason}]}'
+get $SCM/units/SK-2 | head -1 | jq -c '{status, events: [.events[] | {type, corrected: (.correction != null), reason: .correction.reason}]}'
+sql "select count(*) as event_voided_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-voided' and \`key\` in ('SK-1','SK-2');"
+```
+
+관찰:
+
+```
+SK=UNLINKED-<id>
+{"correctionId":"<uuid>","replacementEventId":null}
+→ 201
+{"voidedEvents":1,"skippedEvents":1,"deviceRequestIds":[],"shipmentNo":"UNLINKED-<id>","voided":true}
+{"status":"UNKNOWN","events":[{"type":"DISPATCHED","corrected":true,"reason":"SK-1 은 아직 출발 전이었음"}]}
+{"status":"UNKNOWN","events":[{"type":"DISPATCHED","corrected":true,"reason":"선적 UNLINKED-<id> 무효화: 선적 전체가 잘못 보고됨"}]}
+event_voided_rows
+2
+```
+
+### 24. 활성 여부가 바뀌는 무효화: 기기 요청
+
+등록된 개체가 폐기된 뒤(`SCRAPPED`) 다시 출발했다고 보고한 선적을 입고하면 개체가 다시 활성이 되어 `REGISTER` 요청이 생긴다(`shipment-intake`). 그 선적을 무효화하면 상태가 `SCRAPPED` 로 돌아가 활성이 아니게 되므로 **기기 요청 `DEACTIVATE` 가 무효화 한 번에 하나** 생긴다. 사유는 `SHIPMENT_VOIDED` 다(`DISPATCHED` 로 읽히면 "출발 때문에 비활성화"로 오해된다).
+
+```sh
+curl -s -X POST $SCM/shipments/intake -H 'content-type: application/json' -d '{"shipments":[{"poNumber":"PO-NONE","blNumber":"BL-D1","shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-01","lines":[{"sku":"CAM-01","quantity":1,"serialNumbers":["DEA-1"]}],"source":{"system":"acme-portal"}}]}' | jq -c '.shipments[0] | {shipmentNo, anomalies: [.anomalies[].code]}'
+post $SCM/unit-events '{"serialNumber":"DEA-1","type":"RECEIVED","occurredAt":"2026-10-02T00:00:00Z","locationCode":"WH-ICN","source":{"system":"3PL B"}}'
+post $SCM/unit-registrations '{"serialNumbers":["DEA-1"],"actor":"op-1"}'
+post $SCM/unit-events '{"serialNumber":"DEA-1","type":"SCRAPPED","occurredAt":"2026-10-03T00:00:00Z","source":{"system":"3PL B"}}'
+OUT=$(curl -s -X POST $SCM/shipments/intake -H 'content-type: application/json' -d '{"shipments":[{"poNumber":"PO-NONE","blNumber":"BL-D2","shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-20","lines":[{"sku":"CAM-01","quantity":1,"serialNumbers":["DEA-1"]}],"source":{"system":"acme-portal"}}]}')
+echo "$OUT" | jq -c '.shipments[0] | {shipmentNo, anomalies: [.anomalies[].code]}'
+D2=$(echo "$OUT" | jq -r '.shipments[0].shipmentNo'); echo "D2=$D2"
+get $SCM/units/DEA-1 | head -1 | jq -c '{status, registered: (.registeredAt != null)}'
+curl -s $SCM/device-requests | jq -c '.[] | select(.createdBy=="shipment-intake") | {type, reason, createdBy, counts}'
+OUT=$(curl -s -X POST $SCM/shipments/$D2/void -H 'content-type: application/json' -d '{"actor":"op-1","reason":"BL-D2 는 DEA-1 이 아니라 DEA-2 였음"}')
+echo "$OUT" | jq -c '{voidedEvents, skippedEvents, deviceRequestIds, shipmentNo: .shipment.shipmentNo, voided: .shipment.voided}'
+RID=$(echo "$OUT" | jq -r '.deviceRequestIds[0]')
+curl -s $SCM/device-requests/$RID | jq -c '{type, reason, createdBy, counts}'
+get $SCM/units/DEA-1 | head -1 | jq -c '{status, registered: (.registeredAt != null), events: [.events[] | {type, ref: .source.ref, corrected: (.correction != null)}]}'
+```
+
+관찰:
+
+```
+{"shipmentNo":"UNLINKED-<id>","anomalies":["PO_UNLINKED"]}
+{"eventId":"<uuid>","duplicate":false}
+→ 201
+{"requestId":"<uuid>","registered":["DEA-1"],"excluded":[]}
+→ 201
+{"eventId":"<uuid>","duplicate":false}
+→ 201
+{"shipmentNo":"UNLINKED-<id>","anomalies":["PO_UNLINKED","DUPLICATE_SERIAL"]}
+D2=UNLINKED-<id>
+{"status":"IN_TRANSIT","registered":true}
+{"type":"REGISTER","reason":"DISPATCHED","createdBy":"shipment-intake","counts":{"total":1,"pending":1,"succeeded":0,"failed":0}}
+{"voidedEvents":1,"skippedEvents":0,"deviceRequestIds":["<uuid>"],"shipmentNo":"UNLINKED-<id>","voided":true}
+{"type":"DEACTIVATE","reason":"SHIPMENT_VOIDED","createdBy":"op-1","counts":{"total":1,"pending":1,"succeeded":0,"failed":0}}
+{"status":"SCRAPPED","registered":true,"events":[{"type":"DISPATCHED","ref":"UNLINKED-<id>","corrected":false},{"type":"RECEIVED","ref":null,"corrected":false},{"type":"SCRAPPED","ref":null,"corrected":false},{"type":"REGISTERED","ref":"op-1","corrected":false},{"type":"DISPATCHED","ref":"UNLINKED-<id>","corrected":true}]}
+```
+
+### 25. 동시 요청: 같은 선적의 무효화, 무효화와 같은 발주의 새 제출
+
+같은 선적을 동시에 무효화해도 하나만 통과하고 나머지는 409 이며 500 이 나지 않는다. 사실은 한 번만 정정된다(`event-voided` 3건 = 시리얼 3개). 무효화와 같은 발주의 새 제출이 겹쳐도 차수가 겹치지 않고 누계가 맞는다(발주를 먼저 잠그는 순서는 입고와 같다).
+
+```sh
+mk() { curl -s -X POST $SCM/purchase-orders -H 'content-type: application/json' -d "$1" | jq -r .poNumber; }
+PO6=$(mk '{"supplier":"ACME Shenzhen","orderDate":"2026-10-04","currency":"USD","destinationLocationCode":"WH-ICN","actor":"buyer-1","lines":[{"sku":"CAM-01","orderedQty":10,"requestedDeliveryDate":"2026-11-15"}]}')
+post $SCM/purchase-orders/$PO6/issue '{"actor":"buyer-1"}' | tail -1
+echo "PO6=$PO6"
+curl -s -X POST $SCM/shipments/intake -H 'content-type: application/json' -d '{"shipments":[{"poNumber":"'$PO6'","blNumber":"BL-CC","shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-06","lines":[{"sku":"CAM-01","quantity":3,"serialNumbers":["CC-1","CC-2","CC-3"]}],"source":{"system":"acme-portal"}}]}' | jq -c '.shipments[0] | {shipmentNo, anomalies: [.anomalies[].code]}'
+echo "# (a) 같은 선적을 8건 동시에 무효화"
+for i in 1 2 3 4 5 6 7 8; do curl -s -o /dev/null -w '%{http_code} ' -X POST $SCM/shipments/$PO6-R1/void -H 'content-type: application/json' -d '{"actor":"op-'$i'","reason":"동시 무효화"}' & done; wait; echo
+sql "select count(*) as shipment_corrections from shipment_corrections c join shipments s on s.id = c.shipment_id where s.shipment_no = '$PO6-R1'; select count(*) as event_voided_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-voided' and \`key\` like 'CC-%';"
+echo "# (b) 무효화와 같은 발주의 새 제출이 동시에"
+curl -s -X POST $SCM/shipments/intake -H 'content-type: application/json' -d '{"shipments":[{"poNumber":"'$PO6'","blNumber":"BL-CC2","shipper":"ACME Shenzhen","mode":"SEA","shipDate":"2026-10-06","lines":[{"sku":"CAM-01","quantity":3,"serialNumbers":["CD-1","CD-2","CD-3"]}],"source":{"system":"acme-portal"}}]}' | jq -c '.shipments[0] | {shipmentNo}'
+for i in 1 2 3 4; do curl -s -o /dev/null -w 'intake %{http_code} ' -X POST $SCM/shipments/intake -H 'content-type: application/json' -d '{"shipments":[{"poNumber":"'$PO6'","blNumber":"BL-N'$i'","shipper":"ACME Shenzhen","mode":"SEA","lines":[{"sku":"CAM-01","quantity":1,"serialNumbers":["CN-'$i'"]}],"source":{"system":"acme-portal"}}]}' & done
+curl -s -o /dev/null -w 'void %{http_code} ' -X POST $SCM/shipments/$PO6-R2/void -H 'content-type: application/json' -d '{"actor":"op-1","reason":"동시 제출과 경합"}' &
+wait; echo
+sql "select shipment_no, (select count(*) from shipment_corrections c where c.shipment_id = s.id) as voided from shipments s where purchase_order_id = (select id from purchase_orders where po_number='$PO6') order by id;"
+get $SCM/purchase-orders/$PO6 | head -1 | jq -c '.lines[0] | {orderedQty, shippedQty}'
+```
+
+관찰:
+
+```
+→ 201
+PO6=PO-2026-000006
+{"shipmentNo":"PO-2026-000006-R1","anomalies":[]}
+# (a) 같은 선적을 8건 동시에 무효화
+201 409 409 409 409 409 409 409
+shipment_corrections
+1
+event_voided_rows
+3
+# (b) 무효화와 같은 발주의 새 제출이 동시에
+{"shipmentNo":"PO-2026-000006-R2"}
+intake 201 intake 201 intake 201 intake 201 void 201
+shipment_no	voided
+PO-2026-000006-R1	1
+PO-2026-000006-R2	1
+PO-2026-000006-R3	0
+PO-2026-000006-R4	0
+PO-2026-000006-R5	0
+PO-2026-000006-R6	0
+{"orderedQty":10,"shippedQty":4}
+```
+
+### 26. 대량: 시리얼 5000개 선적의 입고와 무효화
+
+무효화는 입고(`recordAll`)와 같은 크기의 대량 경로다: 정정 기록을 묶음으로 넣고 시리얼마다 `event-voided` 를 아웃박스에 적는다. 같은 크기의 입고와 무효화에 걸린 시간(HTTP 응답, 아웃박스 미발행 행이 0이 될 때까지)을 나란히 잰다. 이 단계는 Redis 가 있어야 아웃박스가 빈다. 시간은 환경마다 다르다: 아래는 이 구성에서 한 번 잰 값이다.
+
+```sh
+now() { python3 -c 'import time; print(time.time())'; }
+unpublished() { sql "select count(*) from outbox_events where published_at is null" | tail -1; }
+drain() { while [ "$(unpublished)" != "0" ]; do sleep 0.2; done; python3 -c "import time; print('outbox 미발행 0 까지 %.1f 초' % (time.time()-$1))"; }
+while [ "$(unpublished)" != "0" ]; do sleep 0.2; done   # 앞 단계가 쌓은 행이 먼저 비게 한다
+echo "미발행: $(unpublished)"
+seq 1 5000 | jq -R -s -c '{shipments:[{poNumber:"PO-NONE",blNumber:"BL-BIG",shipper:"ACME",mode:"SEA",lines:[{sku:"CAM-01",quantity:5000,serialNumbers:(split("\n")|map(select(.!=""))|map("BIG-"+.))}],source:{system:"acme-portal"}}]}' > /tmp/big-$$.json
+T0=$(now)
+curl -s -o /tmp/big-out-$$.json -w '입고 http %{http_code} 응답 %{time_total}s\n' -X POST $SCM/shipments/intake -H 'content-type: application/json' --data-binary @/tmp/big-$$.json
+BIG=$(jq -r '.shipments[0].shipmentNo' /tmp/big-out-$$.json)
+echo "입고 직후 미발행: $(unpublished)"
+drain $T0
+rm /tmp/big-$$.json /tmp/big-out-$$.json
+sql "select count(*) as event_recorded_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-recorded' and \`key\` like 'BIG-%';"
+T1=$(now)
+curl -s -o /tmp/void-out-$$.json -w '무효화 http %{http_code} 응답 %{time_total}s\n' -X POST $SCM/shipments/$BIG/void -H 'content-type: application/json' -d '{"actor":"op-1","reason":"5000개 목록 전체가 잘못됨"}'
+jq -c '{voidedEvents, skippedEvents, deviceRequestIds, voided: .shipment.voided}' /tmp/void-out-$$.json; rm /tmp/void-out-$$.json
+echo "무효화 직후 미발행: $(unpublished)"
+drain $T1
+sql "select count(*) as event_voided_rows from outbox_events where payload->>'\$.type' = 'scm.unit.event-voided' and \`key\` like 'BIG-%'; select count(*) as corrections from unit_event_corrections c join unit_events e on e.id = c.target_event_id join units u on u.id = e.unit_id where u.serial_number like 'BIG-%'; select status, count(*) as units from units where serial_number like 'BIG-%' group by status;"
+```
+
+관찰:
+
+```
+미발행: 0
+입고 http 201 응답 2.407923s
+입고 직후 미발행: 5000
+outbox 미발행 0 까지 3.9 초
+event_recorded_rows
+5000
+무효화 http 201 응답 2.383407s
+{"voidedEvents":5000,"skippedEvents":0,"deviceRequestIds":[],"voided":true}
+무효화 직후 미발행: 5000
+outbox 미발행 0 까지 3.9 초
+event_voided_rows
+5000
+corrections
+5000
+status	units
+UNKNOWN	5000
+```
+
+`drain` 의 시간은 입고·무효화 요청을 보낸 시점부터 아웃박스 행 5,000개가 모두 발행될 때까지다(relay 가 `XADD` 를 한 건씩 보낸다). 서비스 간 소비(OMS 가 이 메시지를 받는 시간)는 `cross-service.md` 의 범위다.
+
 ## 관찰할 것
 
 - 단계 11 의 `CAM-0001` 두 번째 `DISPATCHED`: 다른 선적에 있는 시리얼도 사실을 남기므로(거부하지 않는다) 이력에 `IN_TRANSIT 상태에서 올 수 없는 사실` 이상이 붙는다.
 - 입고 스캔(`RECEIVED`)이나 출고 스캔(`SHIPPED`)이 개체의 첫 사실이면 지금은 `UNKNOWN 상태에서 올 수 없는 사실` 이상이 붙는다 (`projectUnit` 을 직접 불러 확인했다: `RECEIVED`·`STORED`·`SHIPPED` 모두 이상 한 줄, `DISPATCHED` 는 없음). 이 PR 에서는 바꾸지 않았다.
+- 단계 19–20: 무효화는 사실을 지우지 않는다. 정정 기록이 붙고(`corrected: true`) 개체를 다시 접어 상태·이상이 맞춰진다. 다른 선적이 같은 시리얼에 남긴 사실(`CAM-0001` 의 `R1`)은 그대로다. 연결된 선적의 사실은 연결 전 번호로 찾는다(`CAM-0005`).
+- 단계 21: 무효 선적에 대한 연결 시도는 이미 연결된 선적(`R3`)도 `SHIPMENT_ALREADY_LINKED` 가 아니라 `SHIPMENT_ALREADY_VOIDED` 로 거절한다.
+- 단계 22: 무효 선적만 누계와 알려진 시리얼에서 빠진다. 무효화하지 않은 선적과 겹치면(`R3`) 그대로 이상이 붙는다. 차수 번호는 무효 선적도 세어 `R1` 을 다시 쓰지 않는다.
+- 단계 26: 시간은 환경마다 다르다. 같은 크기의 입고와 무효화가 같은 자릿수로 나오는지를 본다.
+- 입고가 생긴 선적을 무효화할 수 있는지는 정해지지 않았고 이 플레이북은 다루지 않는다(입고 기능이 아직 없다).
