@@ -83,21 +83,21 @@
 - `docs/02-domain-model.md` — 테이블, 사실 종류와 상태 전이, 정정, 패키지 주문, DOA 이벤트
 - `docs/03-architecture.md` — 서비스·토픽 구성, 아웃박스와 멱등 처리, 패키지 의존 방향
 - `docs/04-decisions.md` — 기술 선택과 이유
-- `docs/05-roadmap.md` — 아직 구현하지 않은 것. 새 기능 전에 여기부터 확인
+- 아직 구현하지 않은 것은 로드맵 이슈(제목이 `[로드맵]` 인 Task 이슈, 예전 `docs/05-roadmap.md`)와 `docs/06-inbound-design.md` "구현 순서"에 있다. 새 기능 전에 여기부터 확인한다.
 
 도메인 동작이나 구조를 바꾸면 해당 문서도 같이 고친다.
-`README.md` 만 사람이 읽는 문서라 영어로 쓴다. 나머지 문서·주석·커밋은 한국어다.
+`README.md` 만 사람이 읽는 문서라 영어로 쓴다. 나머지 문서·주석·커밋·이슈는 한국어다.
 
 ## autelon 운영
 
-이 프로젝트는 autelon 플러그인(`.claude/settings.json` 의 `enabledPlugins`)으로 운영한다. 2026-10-04 에 도입했고 결정은 `decisions/log.md` 에 있다.
+이 프로젝트는 autelon 플러그인(`.claude/settings.json` 의 `enabledPlugins`)으로 운영한다. 2026-10-04 에 도입했다(결정 이슈 #13).
 
 **지금은 혼합 방식이다.**
 
-- **기획·조사·결정**은 director 방식이다. 세션을 시작하면 `autelon:director` 스킬을 불러 그 규칙(board, PRD, handoff, 사람 승인, 재무 규칙, Notion 동기화)대로 한다. 도메인 판단은 `.claude/agents/` 의 전문가 role 에 맡기고 결과를 사람에게 승인받는다.
+- **기획·조사·결정**은 director 방식이다. 세션을 시작하면 `autelon:director` 스킬을 불러 그 규칙(이슈 기록, PRD, role 결과 코멘트, 사람 승인, 재무 규칙)대로 한다. 도메인 판단은 `.claude/agents/` 의 전문가 role 에 맡기고 결과를 사람에게 승인받는다.
 - **코드 구현·PR 검토·병합**은 `docs/agent-workflow.md` 그대로다. 구현은 `developer` role 이 worktree 에서, 검토와 머지 명령은 `reviewer` role 이, 보안 검토는 `autelon:security-reviewer` 가 한다(`docs/git-rules.md` "PR 리뷰어와 보안 검토"). 코드 PR 은 사람이 하나씩 승인하지 않는다.
 - director 규칙과 다르게 두는 것: 메인 에이전트(director)는 지금처럼 `CLAUDE.md`·`docs/` 를 직접 고칠 수 있다(`docs/agent-workflow.md` 의 예외). 사람 승인은 기획 산출물(PRD, 전문가 role 의 결론, 06 의 미결 항목에 대한 답)에만 받는다.
-- 다음 단계(코드 작업도 board task·handoff 승인으로 옮길지)는 PRD 몇 건을 이 방식으로 운영한 뒤 사용자가 정한다.
+- 다음 단계(코드 작업도 task 이슈의 사람 승인으로 옮길지)는 PRD 몇 건을 이 방식으로 운영한 뒤 사용자가 정한다.
 - 기존 원칙이 우선한다: 근거 없이 정하지 않는다(`docs/agent-workflow.md` "근거 없이 결정하지 않는다"). 기존 문서의 결정을 role 이 뒤집지 않는다. 바꿔야 하면 사람에게 묻는다.
 
 **role** (`.claude/agents/`)
@@ -107,23 +107,36 @@
 | 전략·구조   | `strategist`(목표·지표, 모듈형 제품의 사업 측면), `architect`(서비스 경계·규격, 모듈형 제품의 기술 측면)                                                      |
 | 도메인 전문 | `procurement-expert`, `transport-expert`, `customs-trade-expert`, `warehouse-expert`, `reverse-logistics-expert`, `traceability-expert`, `fulfillment-expert` |
 | 제품·개발   | `po`, `developer`, `reviewer`, `designer`, `da`                                                                                                               |
-| 공용        | `autelon:security-reviewer`(모든 PR), `autelon:finance`, `autelon:notion-sync`                                                                                |
+| 공용        | `autelon:security-reviewer`(모든 PR), `autelon:finance`                                                                                                       |
 
 `docs/06-inbound-design.md` "결정 전에 확인이 필요한 것"의 각 항목은 담당 전문가 role 이 정해져 있다(각 role 파일의 "네가 끌고 갈 미결 항목").
 
-**autelon 파일과 기존 문서의 관계**
+## 기록 (GitHub)
 
-| 경로                                        | 내용                                                                                       | 기존 문서와의 관계                                         |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| `board/tasks.json`, `board/milestones.json` | task 보드, 마일스톤 (형식: `board/README.md`)                                              | 구현 순서의 원본은 `docs/06`·`docs/05`. board 는 진행 추적 |
-| `prds/`                                     | feature 단위 PRD                                                                           | 도메인 동작의 원본은 `docs/02`·`docs/06`                   |
-| `handoffs/`                                 | role 작업 결과                                                                             | 승인된 결론은 해당 `docs/` 문서로 옮긴다                   |
-| `decisions/log.md`                          | 도입 뒤 사람의 결정                                                                        | 그 전의 결정은 `docs/04`, `docs/06`                        |
-| `docs/goals.md`                             | 목표와 지표 체계                                                                           | `docs/01` 의 요약. 지표는 strategist 제안 예정             |
-| `analytics/`                                | 지표 정의·쿼리 (da)                                                                        | —                                                          |
-| `state/`                                    | 스프린트 인계(`sprint.md`). 사용량 스냅샷 `quota.json` 은 커밋하지 않음                    | —                                                          |
-| `notion/`                                   | Notion 페이지·DB ID(`config.json`), 항목별 페이지 URL(`ids.json`). 커밋하지 않음, 로컬에만 | —                                                          |
-| `local/`                                    | 그 밖의 로컬 매핑. 커밋하지 않음                                                           | —                                                          |
-| `.claude/agent-memory/`                     | role 메모리(`memory: project`). 커밋하지 않음                                              | —                                                          |
+"언제 무슨 일이 있었고 왜 그렇게 정했나"는 이슈에 남긴다. 저장소 문서에는 지금 기준의 결론만 쓴다.
+2026-10-04 에 예전 기록 파일(`board/`, `handoffs/`, `decisions/log.md`, `state/sprint.md`, `docs/first-run.md`, `docs/05-roadmap.md`)을 이슈로 옮기고 지웠다. 예전 ID(T-0001 등)는 각 이슈 본문 "현재 결론"에 있다. 원래 파일은 git 히스토리에서 볼 수 있다.
 
-Notion URL·ID, 로컬 절대 경로, 계정 정보는 커밋·PR·handoff 에 쓰지 않는다. 커밋 전에 `git diff --cached | grep -n -E 'notion\.(com|so|site)|/Users/'` 가 비어 있어야 한다.
+| 무엇                       | 어디                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| task, PRD, 결정, role 결과 | `autelon/logistics-hub` 이슈 (task = Task, PRD = Feature, 결정 = `decision` 라벨, role 결과 = 코멘트)  |
+| 로드맵                     | 제목이 `[로드맵]` 인 Task 이슈, 조직 Project 로드맵 화면                                               |
+| 보드                       | 조직 Project #2 (`logistics-hub`). 필드 `Status`·`Role`·`Size`·`Start date`·`Target date`              |
+| 세션 인계                  | 고정된 "현재 스프린트" 이슈 (`sprint` 라벨)                                                            |
+| first-run 결과             | `first-run` 라벨 이슈                                                                                  |
+| 루틴(이슈 작업 루프)       | `agent:ready` 라벨 이슈를 처리한다. `agent:needs-user` 는 사람의 답을 기다린다. 라벨이 없으면 초안이다 |
+
+Project 기본 워크플로는 Item added → `backlog`, Item closed → `done`, Auto-close issue, Auto-add sub-issues 를 켜고, Pull request linked·merged 는 껐다(플러그인 `playbooks/issues.md` 기준값).
+
+## 프로젝트 파일
+
+| 경로                    | 내용                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `docs/goals.md`         | 목표와 지표 체계. `docs/01` 의 요약                                                             |
+| `analytics/`            | 지표 정의·쿼리 (da)                                                                             |
+| `state/`                | 사용량 스냅샷(`quota.json`, 커밋하지 않음)                                                      |
+| `local/`                | 로컬 매핑, 이슈 본문·코멘트 초안, 이슈 백업. 커밋하지 않음                                      |
+| `notion/`               | 예전 Notion 연동의 페이지·DB ID. 커밋하지 않음. Notion 페이지를 보관할지 지울지는 사람이 정한다 |
+| `.claude/agent-memory/` | role 메모리(`memory: project`). 커밋하지 않음                                                   |
+| `docs/git-rules.md`     | 저장소 설정, PR 리뷰어, 보안 검토·머지 조건(공통 절차는 `autelon/.github` 의 `git-workflow.md`) |
+
+Notion URL·ID, 로컬 절대 경로, 계정 정보는 커밋·PR·이슈·코멘트에 쓰지 않는다. 이슈·코멘트·PR 글은 autelon 플러그인의 검사 스크립트(`privacy-check.mjs`)로만 올린다. 커밋 전에 `git diff --cached | grep -n -E 'notion\.(com|so|site)|/Users/'` 가 비어 있어야 한다.
