@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import type { OrderRef } from '@repo/contracts/common';
+import type { UnitEventType } from '@repo/contracts/scm';
 import { newId } from '@repo/db-kit/columns';
 import { isDeadlock, isDuplicateKeyOn } from '@repo/db-kit/errors';
 import { CurrentDb } from '@repo/nest-kit/current-db';
@@ -229,10 +230,53 @@ export class DrizzleUnitRepository implements UnitRepository {
     return events;
   }
 
+  async listEventsBySource(
+    unitIds: readonly string[],
+    match: { type: UnitEventType; sourceRefs: readonly string[] },
+  ): Promise<UnitEvent[]> {
+    if (match.sourceRefs.length === 0) return [];
+    const events: UnitEvent[] = [];
+    for (const chunk of chunked(unitIds)) {
+      const rows = await this.db
+        .get()
+        .select()
+        .from(unitEvents)
+        .where(
+          and(
+            inArray(unitEvents.unitId, chunk),
+            eq(unitEvents.type, match.type),
+            inArray(unitEvents.sourceRef, [...match.sourceRefs]),
+          ),
+        );
+      events.push(...rows.map(toEvent));
+    }
+    return events;
+  }
+
   async addCorrection(correction: Omit<UnitEventCorrection, 'id'>): Promise<UnitEventCorrection> {
     const row: CorrectionRow = { ...correction, id: newId() };
     await this.db.get().insert(unitEventCorrections).values(row);
     return toCorrection(row);
+  }
+
+  async addCorrections(corrections: readonly Omit<UnitEventCorrection, 'id'>[]): Promise<void> {
+    const rows = corrections.map((correction): CorrectionRow => ({ ...correction, id: newId() }));
+    for (const chunk of chunked(rows)) {
+      await this.db.get().insert(unitEventCorrections).values(chunk);
+    }
+  }
+
+  async findCorrectedEventIds(eventIds: readonly string[]): Promise<Set<string>> {
+    const corrected = new Set<string>();
+    for (const chunk of chunked(eventIds)) {
+      const rows = await this.db
+        .get()
+        .select({ targetEventId: unitEventCorrections.targetEventId })
+        .from(unitEventCorrections)
+        .where(inArray(unitEventCorrections.targetEventId, chunk));
+      for (const row of rows) corrected.add(row.targetEventId);
+    }
+    return corrected;
   }
 
   async findCorrectionByTarget(targetEventId: string): Promise<UnitEventCorrection | undefined> {

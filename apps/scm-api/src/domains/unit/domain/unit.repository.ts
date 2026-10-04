@@ -1,3 +1,5 @@
+import type { UnitEventType } from '@repo/contracts/scm';
+
 import type { UnitState } from './unit-projection.js';
 import type { StockCount, Unit, UnitEvent, UnitEventCorrection, UnitLifecycle } from './unit.js';
 
@@ -25,8 +27,21 @@ export interface UnitRepository {
   /** 여러 제품의 유효한 사실을 한 번에. `unitId` 로 묶어서 쓴다. */
   listEffectiveEventsOf(unitIds: readonly string[]): Promise<UnitEvent[]>;
 
+  /**
+   * 개체들의 사실 가운데 종류와 출처 참조가 맞는 것(정정된 것 포함). 개체 id 로 먼저 좁힌다:
+   * 출처 참조에는 인덱스가 없어 그것만으로는 찾지 않는다.
+   */
+  listEventsBySource(
+    unitIds: readonly string[],
+    match: { type: UnitEventType; sourceRefs: readonly string[] },
+  ): Promise<UnitEvent[]>;
+
   addCorrection(correction: Omit<UnitEventCorrection, 'id'>): Promise<UnitEventCorrection>;
+  /** `addCorrection` 의 대량 경로. 같은 사실을 두 번 정정하면 실패한다(`target_event_id` unique). */
+  addCorrections(corrections: readonly Omit<UnitEventCorrection, 'id'>[]): Promise<void>;
   findCorrectionByTarget(targetEventId: string): Promise<UnitEventCorrection | undefined>;
+  /** 주어진 사실 가운데 이미 정정된 것의 id. */
+  findCorrectedEventIds(eventIds: readonly string[]): Promise<Set<string>>;
 
   findLifecycle(serialNumber: string): Promise<UnitLifecycle | undefined>;
   countStock(): Promise<StockCount[]>;
