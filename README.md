@@ -40,7 +40,7 @@ TypeScript 7, ESM everywhere, pnpm catalogs, Turborepo, oxlint, Vitest.
 
 > **Status:** early skeleton. The end-to-end lifecycle works across all three services; partner and
 > sales-channel adapters, authentication and non-serialized stock are not built yet.
-> See the [roadmap](docs/05-roadmap.md).
+> See the roadmap: open issues titled `[로드맵]` and the implementation order in [06 Inbound design](docs/06-inbound-design.md).
 
 ## What it does
 
@@ -198,7 +198,6 @@ The design documents are written in Korean.
 | [02 Domain model](docs/02-domain-model.md)       | Tables, unit events and state transitions, corrections, bundles, DOA events                       |
 | [03 Architecture](docs/03-architecture.md)       | Services and topics, outbox and idempotency, package dependencies                                 |
 | [04 Decisions](docs/04-decisions.md)             | Technology choices and why                                                                        |
-| [05 Roadmap](docs/05-roadmap.md)                 | What is not built yet                                                                             |
 | [Git rules](docs/git-rules.md)                   | Commit and pull request conventions                                                               |
 | [Architecture rules](docs/architecture-rules.md) | Layering inside each service: domain modules, use cases, presentation                             |
 | [Agent workflow](docs/agent-workflow.md)         | How coding agents split, build and review work in this repository                                 |
