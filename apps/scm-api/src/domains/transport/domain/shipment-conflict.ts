@@ -9,3 +9,14 @@ export class ShipmentConflict extends Error {
     this.name = 'ShipmentConflict';
   }
 }
+
+/**
+ * 무효화하려고 읽은 뒤 잠그는 사이에 선적이 다른 발주에 연결되었다(운영자의 연결 명령이 먼저 커밋됨).
+ * 발주 행을 먼저 잠근 뒤에 선적을 잠그는 순서를 지키려면 새로 읽은 발주로 처음부터 다시 해야 한다.
+ */
+export class ShipmentOrderChanged extends Error {
+  constructor(shipmentNo: string) {
+    super(`Shipment ${shipmentNo} was linked to a purchase order while being voided`);
+    this.name = 'ShipmentOrderChanged';
+  }
+}

@@ -3,6 +3,7 @@ import type { ShipmentDetailView, ShipmentSummaryView } from '@repo/contracts/tr
 import type { CatalogService } from '../domains/catalog/application/catalog.service.js';
 import type { PurchaseOrderService } from '../domains/procurement/application/purchase-order.service.js';
 import { currentAnomalies } from '../domains/transport/domain/shipment-numbering.js';
+import { isVoided } from '../domains/transport/domain/shipment-void.js';
 import type { ShipmentDetail } from '../domains/transport/domain/shipment.js';
 
 /** 응답에 싣기 위해 id 를 번호·코드로 바꾸는 표. 선적 도메인은 발주·제품의 코드를 모른다. */
@@ -66,6 +67,7 @@ export const toShipmentSummaryView = (
     totalQty: lines.reduce((sum, line) => sum + line.shippedQty, 0),
     serialCount: lines.reduce((sum, line) => sum + line.serialCount, 0),
     anomalyCount: currentAnomalies(shipment.anomalies, link).length,
+    voided: isVoided(detail),
   };
 };
 
@@ -73,7 +75,7 @@ export const toShipmentDetailView = (
   detail: ShipmentDetail,
   context: ShipmentViewContext,
 ): ShipmentDetailView => {
-  const { shipment, lines, link } = detail;
+  const { shipment, lines, link, correction } = detail;
   return {
     ...toShipmentSummaryView(detail, context),
     note: shipment.note,
@@ -95,6 +97,11 @@ export const toShipmentDetailView = (
       reason: link.reason,
       linkedAt: link.linkedAt.toISOString(),
       anomalies: link.anomalies,
+    },
+    voidRecord: correction && {
+      actor: correction.actor,
+      reason: correction.reason,
+      voidedAt: correction.recordedAt.toISOString(),
     },
   };
 };

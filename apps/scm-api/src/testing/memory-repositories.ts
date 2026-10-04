@@ -126,6 +126,31 @@ export class MemoryUnitRepository implements UnitRepository {
       ),
     );
   }
+  listEventsBySource(
+    unitIds: readonly string[],
+    match: { type: UnitEvent['type']; sourceRefs: readonly string[] },
+  ) {
+    return Promise.resolve(
+      this.events.filter(
+        (e) =>
+          unitIds.includes(e.unitId) &&
+          e.type === match.type &&
+          e.source.ref !== null &&
+          match.sourceRefs.includes(e.source.ref),
+      ),
+    );
+  }
+  addCorrections(corrections: readonly Omit<UnitEventCorrection, 'id'>[]) {
+    for (const correction of corrections) {
+      this.corrections.push({ ...correction, id: `C${++this.seq}` });
+    }
+    return Promise.resolve();
+  }
+  findCorrectedEventIds(eventIds: readonly string[]) {
+    return Promise.resolve(
+      new Set(this.corrections.map((c) => c.targetEventId).filter((id) => eventIds.includes(id))),
+    );
+  }
   addCorrection(correction: Omit<UnitEventCorrection, 'id'>) {
     const saved = { ...correction, id: `C${++this.seq}` };
     this.corrections.push(saved);

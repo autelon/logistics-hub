@@ -38,6 +38,7 @@ import { ReverseStockMovementUsecase } from './reverse-stock-movement.usecase.js
 import { RevisePurchaseOrderUsecase } from './revise-purchase-order.usecase.js';
 import { UpdateLocationPolicyUsecase } from './update-location-policy.usecase.js';
 import { UpdatePurchaseOrderUsecase } from './update-purchase-order.usecase.js';
+import { VoidShipmentUsecase } from './void-shipment.usecase.js';
 
 const usecases = [
   RegisterProductUsecase,
@@ -72,6 +73,7 @@ const usecases = [
   ListShipmentsUsecase,
   GetShipmentUsecase,
   LinkShipmentUsecase,
+  VoidShipmentUsecase,
 ];
 
 @Module({

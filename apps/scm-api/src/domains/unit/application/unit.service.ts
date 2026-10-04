@@ -12,6 +12,7 @@ import { EventOutbox } from '@repo/nest-kit/event-outbox';
 import { scmError } from '../../../errors.js';
 import { activationChange } from '../domain/unit-activation.js';
 import { projectUnit, type UnitState } from '../domain/unit-projection.js';
+import { partitionVoidable } from '../domain/unit-void.js';
 import type {
   LocationRef,
   NewUnitEvent,
@@ -46,6 +47,16 @@ export interface Correction {
 export interface RecordedFact {
   event: UnitEvent;
   deviceRequest: DeviceRequestType | null;
+}
+
+/** 일괄 정정(`voidAll`)의 결과. */
+export interface VoidAllResult {
+  /** 이번에 정정한 사실의 수. 사실마다 `scm.unit.event-voided` 를 하나씩 적었다. */
+  voided: number;
+  /** 이미 정정되어 건너뛴 사실의 수. */
+  skipped: number;
+  /** 다시 접은 결과 기기에서 활성이어야 하는지가 바뀐 개체와 보낼 요청의 종류. */
+  deviceRequests: { unit: Unit; deviceRequest: DeviceRequestType }[];
 }
 
 export interface CorrectionResult {
@@ -222,6 +233,80 @@ export class UnitService {
       const state = projectUnit(byUnit.get(unit.id) ?? [], projectionOf(product));
       await this.units.updateState(unit.id, state, now);
     }
+  }
+
+  /**
+   * 개체들의 사실 가운데 종류와 출처 참조가 맞는 것을 찾는다(이미 정정된 것 포함). 일괄 정정(`voidAll`)의 대상을 고를 때 쓴다.
+   * 개체는 이 호출 직전에 잠근 것이어야 한다.
+   */
+  findBySource(
+    units: readonly Unit[],
+    match: { type: UnitEventType; sourceRefs: readonly string[] },
+  ): Promise<UnitEvent[]> {
+    if (units.length === 0) return Promise.resolve([]);
+    return this.units.listEventsBySource(
+      units.map(({ id }) => id),
+      match,
+    );
+  }
+
+  /**
+   * 사실 여러 건을 한 번에 정정(무효화)한다. 대체 사실은 없다. `correct` 의 대량 경로이고 `recordAll` 과 같은 모양이다:
+   * 정정 기록을 한 번에 넣고, 사실마다 `scm.unit.event-voided` 를 적고, 개체마다 한 번씩만 다시 접으며,
+   * 접기 전후를 비교해 기기 서버에 보낼 요청이 필요한 개체를 돌려준다.
+   * 이미 정정된 사실은 건너뛰고 건수를 돌려준다 (`partitionVoidable`).
+   * 개체는 이 호출 직전에 잠근 것이어야 한다.
+   */
+  async voidAll(
+    targets: readonly CorrectionTarget[],
+    { reason, actor }: { reason: string; actor: string },
+  ): Promise<VoidAllResult> {
+    if (targets.length === 0) return { voided: 0, skipped: 0, deviceRequests: [] };
+    const corrected = await this.units.findCorrectedEventIds(targets.map(({ event }) => event.id));
+    const { voidable, skipped } = partitionVoidable(targets, corrected);
+    if (voidable.length === 0) return { voided: 0, skipped: skipped.length, deviceRequests: [] };
+
+    const now = new Date();
+    // 저장소가 넘겨받은 객체를 제자리에서 갱신할 수 있으니, 갱신하기 전에 값을 따로 떠 둔다.
+    const before = new Map(
+      voidable.map(({ unit }) => [
+        unit.id,
+        { status: unit.status, registeredAt: unit.registeredAt },
+      ]),
+    );
+    await this.units.addCorrections(
+      voidable.map(({ event }) => ({
+        targetEventId: event.id,
+        replacementEventId: null,
+        reason,
+        actor,
+        recordedAt: now,
+      })),
+    );
+    for (const { unit, product, event, locationCode } of voidable) {
+      await this.outbox.enqueue(
+        Topics.scmUnitEvents,
+        unit.serialNumber,
+        makeEvent('scm.unit.event-voided', {
+          ...this.toPayload(unit, product, event, locationCode),
+          reason,
+          replacementEventId: null,
+        }) satisfies UnitEventVoided,
+      );
+    }
+
+    const distinct = [...new Map(voidable.map((target) => [target.unit.id, target])).values()];
+    const effective = await this.units.listEffectiveEventsOf(distinct.map(({ unit }) => unit.id));
+    const byUnit = Map.groupBy(effective, (event) => event.unitId);
+    const deviceRequests: VoidAllResult['deviceRequests'] = [];
+    for (const { unit, product } of distinct) {
+      const state = projectUnit(byUnit.get(unit.id) ?? [], projectionOf(product));
+      await this.units.updateState(unit.id, state, now);
+      const previous = before.get(unit.id);
+      const deviceRequest = previous && activationChange(previous, state);
+      if (deviceRequest) deviceRequests.push({ unit, deviceRequest });
+    }
+    return { voided: voidable.length, skipped: skipped.length, deviceRequests };
   }
 
   /** 정정할 사실과 그 제품을 잠근다. 이미 정정된 사실은 다시 정정할 수 없다. */

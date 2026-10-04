@@ -43,6 +43,13 @@
       "when": 1791044402628,
       "tag": "0005_majestic_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1791083324311,
+      "tag": "0006_absurd_clint_barton",
+      "breakpoints": true
     }
   ]
 }

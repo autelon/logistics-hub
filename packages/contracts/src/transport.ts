@@ -86,6 +86,16 @@ export const LinkShipmentRequest = z.object({
 });
 export type LinkShipmentRequest = z.infer<typeof LinkShipmentRequest>;
 
+/**
+ * 선적 전체를 무효화한다 (`POST /shipments/:shipmentNo/void`). 줄 단위 정정은 없다: 틀렸으면 선적 전체를 무효화하고 다시 제출한다.
+ * `reason` 은 선적 번호와 함께 제품 이력의 정정 사유로도 남는다(그 칸의 500자 한도 안에 들도록 400자까지).
+ */
+export const VoidShipmentRequest = z.object({
+  actor: z.string().min(1).max(100),
+  reason: z.string().min(1).max(400),
+});
+export type VoidShipmentRequest = z.infer<typeof VoidShipmentRequest>;
+
 /** `GET /shipments` 의 쿼리. `poNumber` 는 연결된 발주, `unlinked=true` 는 아직 발주에 연결되지 않은 선적. */
 export const ShipmentListQuery = z.object({
   poNumber: z.string().min(1).max(100).optional(),
@@ -134,6 +144,8 @@ export interface ShipmentSummaryView {
   serialCount: number;
   /** 지금 유효한 이상의 수. */
   anomalyCount: number;
+  /** 무효화된 선적. 선적 수량 누계와 "이미 알려진 시리얼"에서 빠지고, 이 선적이 만든 출발 사실은 정정되었다. */
+  voided: boolean;
 }
 
 export interface ShipmentLineView {
@@ -156,10 +168,30 @@ export interface ShipmentLinkView {
   anomalies: ShipmentAnomalyView[];
 }
 
+/** 선적의 무효화 기록. 추가만 하고 선적 하나에 하나뿐이다. */
+export interface ShipmentVoidView {
+  actor: string;
+  reason: string;
+  voidedAt: string;
+}
+
 export interface ShipmentDetailView extends ShipmentSummaryView {
   note: string | null;
   lines: ShipmentLineView[];
   /** 지금 유효한 이상: 받을 때 찾은 이상 가운데 연결로 해소된 것을 빼고 연결 시점의 이상을 더한 것. */
   anomalies: ShipmentAnomalyView[];
   link: ShipmentLinkView | null;
+  /** 무효화한 선적이면 그 기록. */
+  voidRecord: ShipmentVoidView | null;
+}
+
+/** 선적 무효화의 결과. 건수는 이 선적이 만든 제품 이력의 출발(`DISPATCHED`) 사실 기준이다. */
+export interface VoidShipmentResult {
+  shipment: ShipmentDetailView;
+  /** 이번에 정정(무효화)한 사실의 수. 시리얼마다 `scm.unit.event-voided` 가 하나씩 나간다. */
+  voidedEvents: number;
+  /** 이미 다른 경로로 정정되어 건너뛴 사실의 수. */
+  skippedEvents: number;
+  /** 활성 여부가 바뀐 개체가 있어 만든 기기 요청의 id. 없으면 빈 목록. */
+  deviceRequestIds: string[];
 }

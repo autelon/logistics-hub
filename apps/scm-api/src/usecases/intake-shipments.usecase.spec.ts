@@ -66,7 +66,7 @@ const setup = async () => {
   );
   const run = (...items: ShipmentIntakeInput[]) =>
     usecase.execute(IntakeShipmentsRequest.parse({ shipments: items }));
-  return { ...memory, purchaseOrders, shipmentRepository, poNumber, run };
+  return { ...memory, purchaseOrders, shipments, shipmentRepository, poNumber, run };
 };
 
 const item = (
@@ -271,5 +271,18 @@ describe('IntakeShipmentsUsecase', () => {
 
     expect(result.shipments[0]).toMatchObject({ duplicate: true, shipmentNo: `${poNumber}-R1` });
     expect(shipmentRepository.shipments).toHaveLength(1);
+  });
+
+  it('무효화한 선적은 누계와 알려진 시리얼에서 빠진다: 같은 시리얼로 다시 제출하면 새 차수를 받고 이상이 없다', async () => {
+    const { run, poNumber, shipments } = await setup();
+    const first = await run(item(poNumber)); // CAM 2개, 주문 3
+    const detail = await shipments.lockForVoid(`${poNumber}-R1`);
+    await shipments.recordVoid(detail, { actor: 'op-1', reason: '시리얼 목록이 틀림' });
+
+    const again = await run(item(poNumber, { blNumber: 'BL-1B' }));
+
+    expect(first.shipments[0]?.shipmentNo).toBe(`${poNumber}-R1`);
+    // 무효 선적이 누계 2 와 시리얼 S1·S2 를 잡고 있으면 OVER_SHIPPED(2+2>3)와 DUPLICATE_SERIAL 이 붙는다.
+    expect(again.shipments[0]).toMatchObject({ shipmentNo: `${poNumber}-R2`, anomalies: [] });
   });
 });
