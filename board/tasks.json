@@ -39,6 +39,32 @@
       "handoff": "handoffs/T-0003.md",
       "updated_at": "2026-10-03T19:33:00Z",
       "last_synced": null
+    },
+    {
+      "id": "T-0004",
+      "title": "5b PR 1 사전 검토: 선적 무효화 때 scm.unit.event-voided 대량 발행을 OMS 가 감당하는가",
+      "status": "done",
+      "role": "architect",
+      "prd": null,
+      "milestone": null,
+      "depends_on": ["T-0003"],
+      "size": "small",
+      "handoff": "handoffs/T-0004.md",
+      "updated_at": "2026-10-03T19:58:00Z",
+      "last_synced": null
+    },
+    {
+      "id": "T-0005",
+      "title": "5b PR 1: 선적 무효화(선적 전체 무효화·재제출, DISPATCHED 일괄 정정)",
+      "status": "in_progress",
+      "role": "developer",
+      "prd": null,
+      "milestone": null,
+      "depends_on": ["T-0003", "T-0004"],
+      "size": "large",
+      "handoff": "handoffs/T-0005.md",
+      "updated_at": "2026-10-03T19:58:00Z",
+      "last_synced": null
     }
   ]
 }
