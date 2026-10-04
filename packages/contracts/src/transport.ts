@@ -134,6 +134,8 @@ export interface ShipmentSummaryView {
   serialCount: number;
   /** 지금 유효한 이상의 수. */
   anomalyCount: number;
+  /** 무효화된 선적. 선적 수량 누계와 "이미 알려진 시리얼"에서 빠지고, 이 선적이 만든 출발 사실은 정정되었다. */
+  voided: boolean;
 }
 
 export interface ShipmentLineView {
@@ -156,10 +158,19 @@ export interface ShipmentLinkView {
   anomalies: ShipmentAnomalyView[];
 }
 
+/** 선적의 무효화 기록. 추가만 하고 선적 하나에 하나뿐이다. */
+export interface ShipmentVoidView {
+  actor: string;
+  reason: string;
+  voidedAt: string;
+}
+
 export interface ShipmentDetailView extends ShipmentSummaryView {
   note: string | null;
   lines: ShipmentLineView[];
   /** 지금 유효한 이상: 받을 때 찾은 이상 가운데 연결로 해소된 것을 빼고 연결 시점의 이상을 더한 것. */
   anomalies: ShipmentAnomalyView[];
   link: ShipmentLinkView | null;
+  /** 무효화한 선적이면 그 기록. */
+  voidRecord: ShipmentVoidView | null;
 }

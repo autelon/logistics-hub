@@ -2,8 +2,10 @@ import { ShipmentService } from '../domains/transport/application/shipment.servi
 import { unlinkedShipmentNo } from '../domains/transport/domain/shipment-numbering.js';
 import type {
   NewShipment,
+  NewShipmentCorrection,
   NewShipmentLink,
   Shipment,
+  ShipmentCorrection,
   ShipmentDetail,
   ShipmentFilter,
   ShipmentLine,
@@ -19,7 +21,12 @@ export class MemoryShipmentRepository implements ShipmentRepository {
   /** 줄 id → 시리얼. */
   serials = new Map<string, string[]>();
   links: ShipmentLink[] = [];
+  corrections: ShipmentCorrection[] = [];
   private seq = 0;
+
+  private isVoided(shipmentId: string) {
+    return this.corrections.some((correction) => correction.shipmentId === shipmentId);
+  }
 
   private detailOf(shipment: Shipment): ShipmentDetail {
     return {
@@ -29,6 +36,8 @@ export class MemoryShipmentRepository implements ShipmentRepository {
         .toSorted((a, b) => a.lineNo - b.lineNo)
         .map((line) => ({ ...line })),
       link: this.links.find((link) => link.shipmentId === shipment.id) ?? null,
+      correction:
+        this.corrections.find((correction) => correction.shipmentId === shipment.id) ?? null,
     };
   }
 
@@ -77,6 +86,7 @@ export class MemoryShipmentRepository implements ShipmentRepository {
   shippedQuantities(purchaseOrderLineIds: readonly string[]) {
     const sums = new Map<string, number>();
     for (const line of this.lines) {
+      if (this.isVoided(line.shipmentId)) continue;
       if (line.purchaseOrderLineId && purchaseOrderLineIds.includes(line.purchaseOrderLineId)) {
         sums.set(
           line.purchaseOrderLineId,
@@ -88,7 +98,11 @@ export class MemoryShipmentRepository implements ShipmentRepository {
   }
 
   findKnownSerials(serialNumbers: readonly string[]) {
-    const known = new Set([...this.serials.values()].flat());
+    const known = new Set(
+      this.lines
+        .filter((line) => !this.isVoided(line.shipmentId))
+        .flatMap((line) => this.serials.get(line.id) ?? []),
+    );
     return Promise.resolve(new Set(serialNumbers.filter((serial) => known.has(serial))));
   }
 
@@ -134,6 +148,11 @@ export class MemoryShipmentRepository implements ShipmentRepository {
       const line = this.lines.find((l) => l.id === shipmentLineId);
       if (line) line.purchaseOrderLineId = purchaseOrderLineId;
     }
+    return Promise.resolve();
+  }
+
+  addCorrection(correction: NewShipmentCorrection) {
+    this.corrections.push({ ...correction, id: `X${++this.seq}` });
     return Promise.resolve();
   }
 }

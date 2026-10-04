@@ -68,10 +68,21 @@ export interface ShipmentLink {
   anomalies: ShipmentAnomaly[];
 }
 
+/** 선적의 무효화 기록. 추가만 하고 선적 하나에 하나뿐이다. */
+export interface ShipmentCorrection {
+  id: string;
+  shipmentId: string;
+  reason: string;
+  actor: string;
+  recordedAt: Date;
+}
+
 export interface ShipmentDetail {
   shipment: Shipment;
   lines: ShipmentLine[];
   link: ShipmentLink | null;
+  /** 무효화한 선적이면 그 기록. */
+  correction: ShipmentCorrection | null;
 }
 
 /** 저장 전의 선적 줄. id 는 repository 가 발급한다. */
@@ -96,6 +107,9 @@ export type NewShipment = Omit<Shipment, 'id' | 'shipmentNo'> & {
 
 /** 저장 전의 연결 기록. */
 export type NewShipmentLink = Omit<ShipmentLink, 'id'>;
+
+/** 저장 전의 무효화 기록. */
+export type NewShipmentCorrection = Omit<ShipmentCorrection, 'id'>;
 
 /** 목록 조회 조건. 둘 다 주면 둘 다 만족하는 것만 찾는다. */
 export interface ShipmentFilter {

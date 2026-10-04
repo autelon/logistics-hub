@@ -130,6 +130,7 @@ export const ScmErrorCode = z.enum([
   'SHIPMENT_NOT_FOUND',
   'SHIPMENT_ALREADY_LINKED', // 이미 발주에 연결된 선적은 다시 연결할 수 없음
   'SHIPMENT_LINES_UNMATCHED', // 연결하려는 발주에 같은 SKU 의 줄이 없는 선적 줄이 있음. details 에 줄 번호와 SKU
+  'SHIPMENT_ALREADY_VOIDED', // 무효화한 선적은 다시 무효화하거나 발주에 연결하거나 제품으로 등록할 수 없음
 ]);
 export type ScmErrorCode = z.infer<typeof ScmErrorCode>;
 

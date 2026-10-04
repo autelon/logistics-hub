@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 
 import { newId } from '@repo/db-kit/columns';
 import { isDuplicateKeyOn } from '@repo/db-kit/errors';
@@ -7,6 +7,7 @@ import { CurrentDb } from '@repo/nest-kit/current-db';
 
 import type * as schema from '../../../db/schema.js';
 import {
+  shipmentCorrections,
   shipmentLines,
   shipmentLineSerials,
   shipmentLinks,
@@ -16,8 +17,10 @@ import { ShipmentConflict } from '../domain/shipment-conflict.js';
 import { unlinkedShipmentNo } from '../domain/shipment-numbering.js';
 import type {
   NewShipment,
+  NewShipmentCorrection,
   NewShipmentLink,
   Shipment,
+  ShipmentCorrection,
   ShipmentDetail,
   ShipmentFilter,
   ShipmentLine,
@@ -28,6 +31,7 @@ import type { ShipmentRepository } from '../domain/shipment.repository.js';
 type ShipmentRow = typeof shipments.$inferSelect;
 type LineRow = typeof shipmentLines.$inferSelect;
 type LinkRow = typeof shipmentLinks.$inferSelect;
+type CorrectionRow = typeof shipmentCorrections.$inferSelect;
 
 const toShipment = ({ sourceSystem, sourceRef, ...row }: ShipmentRow): Shipment => ({
   ...row,
@@ -37,6 +41,8 @@ const toShipment = ({ sourceSystem, sourceRef, ...row }: ShipmentRow): Shipment 
 const toLine = (row: LineRow, serialCount: number): ShipmentLine => ({ ...row, serialCount });
 
 const toLink = (row: LinkRow): ShipmentLink => ({ ...row });
+
+const toCorrection = (row: CorrectionRow): ShipmentCorrection => row;
 
 /** IN 절과 다중 행 INSERT 의 한 번 크기. 너무 크면 패킷·플랜이 부담스러워진다. */
 const CHUNK = 500;
@@ -126,7 +132,11 @@ export class DrizzleShipmentRepository implements ShipmentRepository {
           shippedQty: sql<number>`sum(${shipmentLines.shippedQty})`.mapWith(Number),
         })
         .from(shipmentLines)
-        .where(inArray(shipmentLines.purchaseOrderLineId, chunk))
+        .innerJoin(shipments, eq(shipments.id, shipmentLines.shipmentId))
+        .leftJoin(shipmentCorrections, eq(shipmentCorrections.shipmentId, shipments.id))
+        .where(
+          and(inArray(shipmentLines.purchaseOrderLineId, chunk), isNull(shipmentCorrections.id)),
+        )
         .groupBy(shipmentLines.purchaseOrderLineId);
       for (const row of rows) {
         if (row.purchaseOrderLineId !== null) sums.set(row.purchaseOrderLineId, row.shippedQty);
@@ -142,7 +152,11 @@ export class DrizzleShipmentRepository implements ShipmentRepository {
         .get()
         .selectDistinct({ serialNumber: shipmentLineSerials.serialNumber })
         .from(shipmentLineSerials)
-        .where(inArray(shipmentLineSerials.serialNumber, chunk));
+        .innerJoin(shipmentLines, eq(shipmentLines.id, shipmentLineSerials.shipmentLineId))
+        .leftJoin(shipmentCorrections, eq(shipmentCorrections.shipmentId, shipmentLines.shipmentId))
+        .where(
+          and(inArray(shipmentLineSerials.serialNumber, chunk), isNull(shipmentCorrections.id)),
+        );
       for (const row of rows) known.add(row.serialNumber);
     }
     return known;
@@ -200,6 +214,13 @@ export class DrizzleShipmentRepository implements ShipmentRepository {
     }
   }
 
+  async addCorrection(correction: NewShipmentCorrection): Promise<void> {
+    await this.db
+      .get()
+      .insert(shipmentCorrections)
+      .values({ id: newId(), ...correction });
+  }
+
   /** 현재 번호로 찾고, 없으면 연결 전 번호로 찾는다. `lock` 이면 선적 행(과 연결 기록)을 잠근다. */
   private async findOne(shipmentNo: string, lock: boolean): Promise<ShipmentDetail | undefined> {
     const db = this.db.get();
@@ -229,12 +250,19 @@ export class DrizzleShipmentRepository implements ShipmentRepository {
 
     const lineRows: LineRow[] = [];
     const linkRows: LinkRow[] = [];
+    const correctionRows: CorrectionRow[] = [];
     for (const chunk of chunked(shipmentIds)) {
       lineRows.push(
         ...(await db.select().from(shipmentLines).where(inArray(shipmentLines.shipmentId, chunk))),
       );
       linkRows.push(
         ...(await db.select().from(shipmentLinks).where(inArray(shipmentLinks.shipmentId, chunk))),
+      );
+      correctionRows.push(
+        ...(await db
+          .select()
+          .from(shipmentCorrections)
+          .where(inArray(shipmentCorrections.shipmentId, chunk))),
       );
     }
 
@@ -250,6 +278,7 @@ export class DrizzleShipmentRepository implements ShipmentRepository {
 
     return rows.map((row) => {
       const link = linkRows.find((candidate) => candidate.shipmentId === row.id);
+      const correction = correctionRows.find((candidate) => candidate.shipmentId === row.id);
       return {
         shipment: toShipment(row),
         lines: lineRows
@@ -257,6 +286,7 @@ export class DrizzleShipmentRepository implements ShipmentRepository {
           .toSorted((a, b) => a.lineNo - b.lineNo)
           .map((line) => toLine(line, serialCounts.get(line.id) ?? 0)),
         link: link ? toLink(link) : null,
+        correction: correction ? toCorrection(correction) : null,
       };
     });
   }

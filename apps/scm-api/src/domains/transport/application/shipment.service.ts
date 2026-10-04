@@ -3,7 +3,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import { scmError } from '../../../errors.js';
 import { roundShipmentNo } from '../domain/shipment-numbering.js';
 import { planLink, type PlanningOrder } from '../domain/shipment-plan.js';
-import type { NewShipment, Shipment, ShipmentDetail, ShipmentFilter } from '../domain/shipment.js';
+import { decideVoid, isVoided } from '../domain/shipment-void.js';
+import type {
+  NewShipment,
+  Shipment,
+  ShipmentCorrection,
+  ShipmentDetail,
+  ShipmentFilter,
+} from '../domain/shipment.js';
 import { ShipmentRepository } from '../domain/shipment.repository.js';
 
 /** 선적을 기록할 초안. 발주에 연결되는 것은 발주 번호를 알아야 차수 번호를 매길 수 있어 id 와 번호를 함께 받는다. */
@@ -62,12 +69,13 @@ export class ShipmentService {
     return this.shipments.insertAll(numbered);
   }
 
+  /** 발주 줄별 선적 수량 누계. 무효화한 선적은 뺀다. */
   shippedQuantities(purchaseOrderLineIds: readonly string[]): Promise<Map<string, number>> {
     if (purchaseOrderLineIds.length === 0) return Promise.resolve(new Map());
     return this.shipments.shippedQuantities(purchaseOrderLineIds);
   }
 
-  /** 이미 어떤 선적에 들어 있는 시리얼. */
+  /** 이미 어떤 선적에 들어 있는 시리얼. 무효화한 선적의 시리얼은 뺀다. */
   async knownSerials(serialNumbers: readonly string[]): Promise<Set<string>> {
     if (serialNumbers.length === 0) return new Set();
     return this.shipments.findKnownSerials(serialNumbers);
@@ -83,15 +91,61 @@ export class ShipmentService {
     return this.shipments.listRecent(filter, limit);
   }
 
-  /** 선적의 시리얼 전부. 제품 등록 명령이 선적 단위로 받을 때 쓴다. */
+  /**
+   * 선적의 시리얼 전부. 제품 등록 명령이 선적 단위로 받을 때 쓴다.
+   * 무효화한 선적은 거절한다(`SHIPMENT_ALREADY_VOIDED`): 그 선적이 만든 출발 사실은 정정되었다.
+   */
   async serialNumbersOf(shipmentNo: string): Promise<string[]> {
-    const { shipment } = await this.get(shipmentNo);
+    const detail = await this.get(shipmentNo);
+    if (isVoided(detail)) {
+      throw scmError('SHIPMENT_ALREADY_VOIDED', `Shipment ${detail.shipment.shipmentNo} is voided`);
+    }
+    return this.shipments.serialNumbersOf(detail.shipment.id);
+  }
+
+  /** 선적의 시리얼 전부. 무효화한 선적이어도 준다 (무효화가 정정할 사실을 찾는 데 쓴다). */
+  serialNumbersIn({ shipment }: ShipmentDetail): Promise<string[]> {
     return this.shipments.serialNumbersOf(shipment.id);
   }
 
   /**
+   * 무효화할 선적을 잠그고 전제를 검사한다 (우리가 내리는 명령이라 거절한다): 모르는 선적 `SHIPMENT_NOT_FOUND`,
+   * 이미 무효화된 선적 `SHIPMENT_ALREADY_VOIDED`. 연결 전 번호로도 찾는다.
+   * 연결된 선적이면 호출한 usecase 가 그 발주 행을 먼저 잠가야 한다 (발주 → 선적 → 개체 순서).
+   */
+  async lockForVoid(shipmentNo: string): Promise<ShipmentDetail> {
+    const detail = await this.shipments.findByShipmentNoForUpdate(shipmentNo);
+    const decision = decideVoid(detail);
+    if (!detail || decision === 'NOT_FOUND') {
+      throw scmError('SHIPMENT_NOT_FOUND', `Unknown shipment ${shipmentNo}`);
+    }
+    if (decision === 'ALREADY_VOIDED') {
+      throw scmError(
+        'SHIPMENT_ALREADY_VOIDED',
+        `Shipment ${detail.shipment.shipmentNo} is already voided`,
+      );
+    }
+    return detail;
+  }
+
+  /**
+   * 잠근 선적을 무효화한 것으로 기록한다. 보고된 선적은 지우거나 고치지 않고 무효화 기록만 더한다.
+   * 이 선적이 만든 제품 이력은 호출한 usecase 가 정정한다 (`UnitService.voidAll`).
+   */
+  async recordVoid(
+    { shipment }: ShipmentDetail,
+    { actor, reason }: { actor: string; reason: string },
+    now: Date = new Date(),
+  ): Promise<Omit<ShipmentCorrection, 'id'>> {
+    const correction = { shipmentId: shipment.id, reason, actor, recordedAt: now };
+    await this.shipments.addCorrection(correction);
+    return correction;
+  }
+
+  /**
    * 발주에 연결되지 않은 선적을 운영자가 발주에 연결한다 (우리가 내리는 명령이라 거절할 수 있다).
-   * 모든 선적 줄이 발주 줄에 맞아야 하고(`SHIPMENT_LINES_UNMATCHED`), 이미 연결된 선적은 다시 연결하지 않는다.
+   * 모든 선적 줄이 발주 줄에 맞아야 하고(`SHIPMENT_LINES_UNMATCHED`), 이미 연결된 선적은 다시 연결하지 않는다(`SHIPMENT_ALREADY_LINKED`).
+   * 무효화한 선적은 연결하지 않는다(`SHIPMENT_ALREADY_VOIDED`).
    * 연결 기록(shipment_links)을 추가하고 선적의 해석 값만 채운다: 이미 차수를 받은 다른 선적의 번호는 바뀌지 않고,
    * 이 선적이 그 발주의 다음 차수를 받는다.
    *
@@ -108,6 +162,12 @@ export class ShipmentService {
     const detail = await this.shipments.findByShipmentNoForUpdate(shipmentNo);
     if (!detail) throw scmError('SHIPMENT_NOT_FOUND', `Unknown shipment ${shipmentNo}`);
     const { shipment, lines } = detail;
+    if (isVoided(detail)) {
+      throw scmError(
+        'SHIPMENT_ALREADY_VOIDED',
+        `Shipment ${shipment.shipmentNo} is voided and cannot be linked`,
+      );
+    }
     if (shipment.purchaseOrderId !== null) {
       throw scmError(
         'SHIPMENT_ALREADY_LINKED',

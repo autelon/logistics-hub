@@ -417,3 +417,19 @@ export const shipmentLinks = mysqlTable(
   },
   (t) => [index('shipment_links_po_idx').on(t.purchaseOrderId)],
 );
+
+/**
+ * 선적의 무효화 기록. 추가만 하고 선적 하나에 하나뿐이다(`shipment_id` unique).
+ * 보고된 선적은 고치거나 지우지 않는다. 틀렸으면 선적 전체를 무효화하고 새 선적으로 다시 제출한다(줄 단위 정정은 없다).
+ * 무효 선적은 선적 수량 누계와 "이미 알려진 시리얼" 조회에서 빠지지만, 차수 번호를 셀 때는 계속 센다.
+ */
+export const shipmentCorrections = mysqlTable('shipment_corrections', {
+  id: idColumn().primaryKey(),
+  shipmentId: idColumn()
+    .notNull()
+    .unique()
+    .references(() => shipments.id),
+  reason: varchar({ length: 500 }).notNull(),
+  actor: varchar({ length: 100 }).notNull(),
+  recordedAt: utcDateTime().notNull(),
+});
