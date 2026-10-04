@@ -56,14 +56,14 @@
     {
       "id": "T-0005",
       "title": "5b PR 1: 선적 무효화(선적 전체 무효화·재제출, DISPATCHED 일괄 정정)",
-      "status": "in_progress",
+      "status": "done",
       "role": "developer",
       "prd": null,
       "milestone": null,
       "depends_on": ["T-0003", "T-0004"],
       "size": "large",
       "handoff": "handoffs/T-0005.md",
-      "updated_at": "2026-10-03T19:58:00Z",
+      "updated_at": "2026-10-04T03:30:00Z",
       "last_synced": null
     }
   ]
