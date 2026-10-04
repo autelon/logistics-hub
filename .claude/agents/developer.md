@@ -14,11 +14,11 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 시작할 때 읽는다
 
 - `CLAUDE.md`(함정과 깨면 안 되는 설계 원칙), `docs/git-rules.md`, `docs/architecture-rules.md`, `docs/testing.md`.
-- 지시문에 있는 PRD·handoff·설계 문서.
+- 지시문에 있는 PRD 이슈·선행 task 의 결과 코멘트·설계 문서.
 
 작업
 
-- 맡은 작업 하나만 한다. 범위 밖의 문제를 발견하면 고치지 말고 PR 본문의 `미검증` 과 handoff 에 적는다.
+- 맡은 작업 하나만 한다. 범위 밖의 문제를 발견하면 고치지 말고 PR 본문의 `미검증` 과 결과 코멘트에 적는다.
 - `origin/main` 에서 브랜치를 만들고, `docs/git-rules.md` 의 커밋 규칙(한국어, `type(scope)`, 왜·결정·검증·미검증, 논리적 변경 하나가 커밋 하나)대로 쌓는다. author 는 실제로 작업한 모델명이다(`git commit --author="<모델명> <noreply@anthropic.com>"`).
 - 끝내기 전에 `pnpm check` 를 통과시킨다(셸에 mise 가 없으면 `mise exec --`).
 - 단위 테스트 위의 동작(HTTP, DB, 이벤트, 웹 콘솔)을 건드렸으면 `docs/testing.md` 대로 해당 플레이북(`docs/playbooks/`)을 처음부터 끝까지 실제로 돌리고, 실행한 파일·단계 번호와 관찰한 상태 코드·본문·화면 내용을 PR 의 `검증` 에 적는다. 돌리지 않았으면 돌리지 않았다고 쓴다. 기대값은 추측하지 말고 실제 응답을 붙인다.
@@ -39,9 +39,12 @@ PR
 
 - 요구사항이 모호하거나 설계 결정이 필요하면 추정해서 구현하지 않는다. 가능한 해석을 적고 `## 사람에게 묻기`로 넘긴다. 물류 실무에 달린 것은 특히 그렇다.
 - 린트·타입 검사를 끄거나 우회하지 않는다.
-- 개인 리소스 정보(Notion URL·ID, 로컬 절대 경로, 계정 정보)를 커밋·PR 본문·handoff 에 쓰지 않는다. 커밋 전에 `git diff --cached | grep -n -E 'notion\.(com|so|site)|/Users/'` 가 비어 있는지 본다.
+- 개인 리소스 정보(Notion URL·ID, 로컬 절대 경로, 임시 폴더 경로, 계정 정보)를 커밋·PR 본문·코멘트에 쓰지 않는다. 커밋 전에 `git diff --cached | grep -n -E 'notion\.(com|so|site)|/Users/'` 가 비어 있는지 본다.
 
 출력
 
-- handoff 는 지시문에 준 **절대 경로**에 쓴다(worktree 안의 상대 경로 `handoffs/` 에 쓰지 않는다). 내용: 바꾼 것, 브랜치와 PR 번호, 검증(명령·플레이북 단계와 관찰 결과), 미검증, PRD "개발사항"·"결과" 섹션 초안.
+- 결과는 자기 task 이슈에 코멘트로만 올린다. 형식은 지시문에 있는 코멘트 템플릿을 따르고, 초안을 지시받은 `local/comments/` 경로에 쓴 뒤 검사 스크립트로 올린다(`node <검사 스크립트> gh issue comment <이슈 번호> -R <저장소> -F <초안 경로>`). worktree 안에서도 `local/` 은 커밋되지 않는다.
+- 코멘트 내용: 바꾼 것, 브랜치 이름, PR 번호, 테스트 결과(명령과 출력 요약), 남은 문제.
+- PRD "개발사항"·"결과" 섹션 초안을 코멘트 산출물 절에 넣는다.
+- PR 본문에 `Closes #N` 을 넣지 않는다(task 는 승인 뒤 director 가 닫는다). `Refs #N` 으로 쓴다.
 - 코드베이스 규칙·함정은 메모리에 남긴다.
